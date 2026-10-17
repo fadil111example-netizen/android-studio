@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="adbw_run_title">Run on…</string>
+  <string name="adbw_method_system">Install normally (system installer)</string>
+  <string name="adbw_method_shizuku">Install via Shizuku</string>
+  <string name="adbw_method_adb">Install via Wireless ADB (this phone)</string>
+  <string name="adbw_unsupported">Wireless debugging needs Android 11 or newer.</string>
+  <string name="adbw_connecting">Connecting to ADB…</string>
+  <string name="adbw_installing">Installing via ADB…</string>
+  <string name="adbw_install_failed">ADB install failed: %1$s</string>
+  <string name="adbw_pair_title">Pair with ADB</string>
+  <string name="adbw_pair_message">1. Turn on Developer options → Wireless debugging (Wi-Fi must be connected).\n2. Tap \"Pair device with pairing code\".\n3. Enter the 6-digit code here, or type it in the notification so you can stay on the Settings screen.</string>
+  <string name="adbw_pair_port_hint">Pairing port</string>
+  <string name="adbw_pair_code_hint">Pairing code (6 digits)</string>
+  <string name="adbw_pair_action">Pair &amp; connect</string>
+  <string name="adbw_open_dev_options">Developer options</string>
+  <string name="adbw_pair_need_input">Enter the pairing port and the 6-digit code.</string>
+  <string name="adbw_pairing">Pairing…</string>
+  <string name="adbw_pair_found">Pairing service found (port %1$d). Enter the code.</string>
+  <string name="adbw_pair_success">Paired and connected to ADB.</string>
+  <string name="adbw_pair_failed">Pairing failed: %1$s</string>
+  <string name="adbw_notif_channel">ADB wireless pairing</string>
+  <string name="adbw_notif_title">ADB pairing</string>
+  <string name="adbw_notif_text">Enter the pairing code shown in Settings.</string>
+  <string name="adbw_notif_action">Enter pairing code</string>
+</resources>

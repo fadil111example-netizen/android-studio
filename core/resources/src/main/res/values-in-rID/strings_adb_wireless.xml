@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="adbw_run_title">Jalankan lewat…</string>
+  <string name="adbw_method_system">Install biasa (installer sistem)</string>
+  <string name="adbw_method_shizuku">Install via Shizuku</string>
+  <string name="adbw_method_adb">Install via ADB Wireless (HP ini)</string>
+  <string name="adbw_unsupported">Wireless debugging membutuhkan Android 11 atau lebih baru.</string>
+  <string name="adbw_connecting">Menghubungkan ke ADB…</string>
+  <string name="adbw_installing">Menginstal lewat ADB…</string>
+  <string name="adbw_install_failed">Install ADB gagal: %1$s</string>
+  <string name="adbw_pair_title">Pairing ADB</string>
+  <string name="adbw_pair_message">1. Aktifkan Opsi pengembang → Debugging nirkabel (Wi-Fi harus tersambung).\n2. Ketuk \"Pasangkan perangkat dengan kode pairing\".\n3. Masukkan kode 6 digit di sini, atau ketik lewat notifikasi agar tetap berada di layar Pengaturan.</string>
+  <string name="adbw_pair_port_hint">Port pairing</string>
+  <string name="adbw_pair_code_hint">Kode pairing (6 digit)</string>
+  <string name="adbw_pair_action">Pair &amp; hubungkan</string>
+  <string name="adbw_open_dev_options">Opsi pengembang</string>
+  <string name="adbw_pair_need_input">Isi port pairing dan kode 6 digit.</string>
+  <string name="adbw_pairing">Sedang pairing…</string>
+  <string name="adbw_pair_found">Layanan pairing ditemukan (port %1$d). Masukkan kodenya.</string>
+  <string name="adbw_pair_success">Berhasil pairing dan terhubung ke ADB.</string>
+  <string name="adbw_pair_failed">Pairing gagal: %1$s</string>
+  <string name="adbw_notif_channel">Pairing ADB wireless</string>
+  <string name="adbw_notif_title">Pairing ADB</string>
+  <string name="adbw_notif_text">Masukkan kode pairing yang tampil di Pengaturan.</string>
+  <string name="adbw_notif_action">Masukkan kode pairing</string>
+</resources>

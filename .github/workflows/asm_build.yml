@@ -1,0 +1,94 @@
+name: Build Android Code Studio
+
+on:
+  push:
+    branches:
+      - "dev"
+      - "main"
+      - "indexing"
+      - "release/**"
+    paths-ignore:
+      - '**.md'
+      - '**.json'
+      - 'fastlane/**'
+  pull_request:
+    branches: [ "dev", "main" ]
+    paths-ignore:
+      - '**.md'
+      - '**.json'
+      - 'fastlane/**'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Select Build Type'
+        required: true
+        default: 'Debug'
+        type: choice
+        options:
+          - Debug
+          - Release
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Determine build type
+        run: |
+          SELECTED_TYPE="${{ github.event.inputs.build_type }}"
+          BUILD_TYPE="${SELECTED_TYPE:-Debug}"
+          echo "BUILD_TYPE=$BUILD_TYPE" >> "$GITHUB_ENV"
+          echo "BUILD_TYPE_LOWER=$(echo "$BUILD_TYPE" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Generate missing intermediate dirs
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/core/app/build/intermediates/external_file_lib_dex_archives/debug/desugarDebugFileDependencies"
+          mkdir -p "$GITHUB_WORKSPACE/core/app/build/intermediates/l8_art_profile/release/l8DexDesugarLibRelease"
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Restore Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-v3-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-v3-
+            ${{ runner.os }}-gradle-
+
+      # Tidak memakai keystore developer asli. Build Debug maupun Release
+      # ditandatangani otomatis dengan debug keystore standar Android.
+      # (Tidak ada secret yang dibutuhkan.)
+      - name: Assemble APK
+        run: ./gradlew assemble${{ env.BUILD_TYPE }} --stacktrace --no-daemon
+
+      - name: List APK files
+        run: find core/app/build/outputs/apk -name "*.apk" -exec ls -la {} \; || true
+
+      # Hanya satu APK: arm64-v8a (cocok untuk hampir semua HP modern)
+      - name: Upload APK (arm64-v8a)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-studio-arm64-v8a-${{ env.BUILD_TYPE_LOWER }}
+          path: core/app/build/outputs/apk/**/*arm64-v8a*.apk
+          if-no-files-found: error
