@@ -99,7 +99,7 @@ class RestoreActivity : AppCompatActivity() {
           text =
               "Pilih arsip (.zip .tar .tar.gz .tar.xz) atau folder yang sudah kamu punya " +
                   "(android-sdk, acs, plugins, ACSProjects, .gradle, JDK, dll). Bisa banyak sekaligus. " +
-                  "Hanya komponen arm64 (aarch64) yang diterima; struktur yang berantakan dirapikan otomatis."
+                  "Semua komponen yang dikenali dimuat apa adanya; struktur yang berantakan dirapikan otomatis."
           textSize = 14f
           setPadding(0, dp(8), 0, dp(12))
         }
@@ -238,11 +238,9 @@ class RestoreActivity : AppCompatActivity() {
 
       var ok = 0
       for (c in found) {
-        val problem = validate(c)
-        if (problem != null) {
-          log("DITOLAK [${c.kind}] ${c.src.name}: $problem")
-          continue
-        }
+        // Tidak ada penolakan: semua komponen yang dikenali selalu dimuat.
+        val note = validate(c)
+        if (note != null) log("Catatan [${c.kind}]: $note (tetap dimuat)")
         log("Menempatkan [${c.kind}] -> ${c.dest.absolutePath}")
         mergeInto(c.src, c.dest)
         fixExecutables(c.dest)
