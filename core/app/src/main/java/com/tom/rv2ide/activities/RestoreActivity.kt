@@ -13,7 +13,10 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.tom.rv2ide.app.IDEApplication
 import com.tom.rv2ide.utils.Environment
+import java.nio.file.Files
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.IOException
@@ -50,6 +53,14 @@ class RestoreActivity : AppCompatActivity() {
   private lateinit var btnFolder: MaterialButton
   private lateinit var btnStart: MaterialButton
   private lateinit var btnDone: MaterialButton
+  private lateinit var btnJdk: MaterialButton
+
+  private val terminalCallback =
+      registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        // Kembali dari Terminal: layar setup akan mengecek ulang JDK dan lanjut bila lengkap.
+        setResult(RESULT_OK)
+        finish()
+      }
 
   private val pickArchives =
       registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -128,6 +139,19 @@ class RestoreActivity : AppCompatActivity() {
     logScroll = ScrollView(this)
     logScroll.addView(logView)
     root.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+    btnJdk =
+        button("Instal JDK otomatis (hanya JDK, 1 tombol)") {
+          terminalCallback.launch(
+              android.content.Intent(this, TerminalActivity::class.java)
+                  .putExtra(
+                      TerminalActivity.EXTRA_RUN_COMMAND,
+                      "pkg install -y openjdk-17 git openssh; echo; echo '=== Selesai. Kembali ke aplikasi... ==='; sleep 3",
+                  )
+          )
+        }
+    btnJdk.visibility = android.view.View.GONE
+    root.addView(btnJdk)
 
     btnDone =
         button("Selesai") {
@@ -250,12 +274,54 @@ class RestoreActivity : AppCompatActivity() {
         }
         ok++
       }
-      log(if (ok > 0) "SELESAI: $ok komponen berhasil dimuat. Tekan 'Selesai'." else "Tidak ada yang diterima.")
+      log(if (ok > 0) "SELESAI: $ok komponen berhasil dimuat." else "Tidak ada yang diterima.")
+
+      // Aplikasi menganggap JDK 'terpasang' hanya jika `java` benar-benar bisa dijalankan.
+      val jdkHome = File(Environment.PREFIX, "lib/jvm").listFiles()?.firstOrNull { File(it, "bin/java").isFile }
+      if (jdkHome != null) {
+        val problem = probeJdk(jdkHome)
+        if (problem == null) {
+          log("Cek JDK: OK (java berjalan normal).")
+        } else {
+          runOnUiThread { btnJdk.visibility = android.view.View.VISIBLE }
+          log("Cek JDK: GAGAL. java tidak bisa dijalankan. Pesan dari sistem:\n$problem")
+          log(
+              "Artinya JDK ini butuh pustaka Termux lain yang tidak ikut di backup. " +
+                  "Tekan tombol 'Instal JDK otomatis' di bawah: hanya JDK (dan git/openssh) yang " +
+                  "diunduh, SDK/plugin/Gradle hasil restore TIDAK diunduh ulang."
+          )
+        }
+      }
+      if (jdkHome == null) {
+        runOnUiThread { btnJdk.visibility = android.view.View.VISIBLE }
+        log("JDK belum ada. Tekan 'Instal JDK otomatis' di bawah (hanya JDK yang diunduh).")
+      }
       return ok
     } finally {
       staging.deleteRecursively()
     }
   }
+
+  private fun probeJdk(javaHome: File): String? =
+      try {
+        val java = File(javaHome, "bin/java")
+        if (!java.canExecute()) java.setExecutable(true, false)
+        val env = HashMap(TermuxShellEnvironment().getEnvironment(IDEApplication.instance, false))
+        val pb =
+            ProcessBuilder(
+                Environment.BASH_SHELL.absolutePath,
+                "-c",
+                "${java.absolutePath} -XshowSettings:properties -version",
+            )
+        pb.environment().putAll(env)
+        pb.redirectErrorStream(true)
+        pb.directory(Environment.HOME)
+        val out = pb.start().inputStream.bufferedReader().readText()
+        if (out.contains("java.home") && out.contains("java.version")) null
+        else out.lines().filter { it.isNotBlank() }.take(6).joinToString("\n")
+      } catch (t: Throwable) {
+        "${t.javaClass.simpleName}: ${t.message}"
+      }
 
   // ----------------------------------------------------------------------------- deteksi
 
@@ -272,6 +338,9 @@ class RestoreActivity : AppCompatActivity() {
         return Component("ACS (server bahasa)", d, File(home, "acs"))
     if (n == "servers" && subdirs(d, "kotlin", "c_cpp") > 0)
         return Component("ACS servers", d, File(home, "acs/servers"))
+    if (n == "usr" && File(d, "bin").isDirectory && File(d, "lib").isDirectory &&
+        (File(d, "bin/bash").exists() || File(d, "lib/jvm").isDirectory))
+        return Component("Termux usr (JDK, git, dll)", d, Environment.PREFIX)
     if (File(d, "bin/java").isFile && (File(d, "lib/modules").exists() || File(d, "release").exists())) {
       val major = jdkMajor(d) ?: "17"
       return Component("JDK", d, File(Environment.PREFIX, "lib/jvm/java-$major-openjdk"))
@@ -351,8 +420,28 @@ class RestoreActivity : AppCompatActivity() {
 
   // ----------------------------------------------------------------------------- penempatan
 
+  private fun isLink(f: File): Boolean =
+      try {
+        Files.isSymbolicLink(f.toPath())
+      } catch (e: Throwable) {
+        false
+      }
+
   private fun mergeInto(src: File, dest: File) {
-    if (!dest.exists()) {
+    if (isLink(src)) {
+      try {
+        val target = Files.readSymbolicLink(src.toPath()).toString()
+        if (isLink(dest) || (dest.exists() && !dest.isDirectory)) dest.delete()
+        if (!dest.exists() && !isLink(dest)) {
+          dest.parentFile?.mkdirs()
+          Os.symlink(target, dest.path)
+        }
+      } catch (e: Throwable) {
+        // abaikan symlink yang gagal dibuat
+      }
+      return
+    }
+    if (!dest.exists() && !isLink(dest)) {
       dest.parentFile?.mkdirs()
       if (src.renameTo(dest)) return
     }
@@ -360,15 +449,20 @@ class RestoreActivity : AppCompatActivity() {
       dest.mkdirs()
       src.listFiles()?.forEach { mergeInto(it, File(dest, it.name)) }
     } else {
-      if (dest.exists() && dest.length() == src.length()) return
+      if (!isLink(dest) && dest.exists() && dest.length() == src.length()) return
+      if (isLink(dest)) dest.delete()
       dest.parentFile?.mkdirs()
-      src.copyTo(dest, overwrite = true)
+      try {
+        src.copyTo(dest, overwrite = true)
+      } catch (e: IOException) {
+        log("  gagal menimpa ${dest.name}: ${e.message}")
+      }
     }
   }
 
   private fun fixExecutables(root: File) {
-    root.walkTopDown().forEach { f ->
-      if (!f.isFile || f.length() < 4) return@forEach
+    root.walkTopDown().onEnter { !isLink(it) }.forEach { f ->
+      if (isLink(f) || !f.isFile || f.length() < 4) return@forEach
       try {
         f.inputStream().use {
           val h = ByteArray(4)

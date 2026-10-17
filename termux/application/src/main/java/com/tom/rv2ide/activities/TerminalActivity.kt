@@ -57,6 +57,9 @@ class TerminalActivity : TermuxActivity() {
 
     const val EXTRA_ONBOARDING_RUN_IDESETUP = "ide.onboarding.terminal.runIdesetup"
     const val EXTRA_ONBOARDING_RUN_IDESETUP_ARGS = "ide.onboarding.terminal.runIdesetup.args"
+
+    /** Menjalankan satu perintah shell (mis. `pkg install -y openjdk-17`) di sesi baru. */
+    const val EXTRA_RUN_COMMAND = "ide.terminal.runCommand"
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,6 +104,12 @@ class TerminalActivity : TermuxActivity() {
       launchFailsafe: Boolean,
   ) {
     if (intent != null) {
+      val runCommand = intent.getStringExtra(EXTRA_RUN_COMMAND)
+      if (!runCommand.isNullOrBlank()) {
+        addCommandSession(runCommand)
+        return
+      }
+
       val runIdesetup = intent.getBooleanExtra(EXTRA_ONBOARDING_RUN_IDESETUP, false)
       val runIdesetupArgs = intent.getStringArrayExtra(EXTRA_ONBOARDING_RUN_IDESETUP_ARGS)
       if (runIdesetup && !runIdesetupArgs.isNullOrEmpty()) {
@@ -116,6 +125,25 @@ class TerminalActivity : TermuxActivity() {
         existingSession,
         launchFailsafe,
     )
+  }
+
+  private fun addCommandSession(command: String) {
+    val session =
+        termuxService.createTermuxSession(
+            /* executablePath = */ Environment.BASH_SHELL.absolutePath,
+            /* arguments = */ arrayOf("-c", command),
+            /* stdin = */ null,
+            /* workingDirectory = */ Environment.HOME.absolutePath,
+            /* isFailSafe = */ false,
+            /* sessionName = */ "Instal JDK",
+        )
+
+    if (session == null) {
+      flashError(R.string.msg_cannot_create_terminal_session)
+      return
+    }
+
+    termuxTerminalSessionClient.setCurrentSession(session.terminalSession)
   }
 
   private fun addIdesetupSession(args: Array<String>) {
