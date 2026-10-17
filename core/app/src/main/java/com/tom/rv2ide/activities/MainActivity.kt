@@ -43,6 +43,7 @@ import com.tom.rv2ide.viewmodel.MainViewModel
 import com.tom.rv2ide.viewmodel.MainViewModel.Companion.SCREEN_MAIN
 import com.tom.rv2ide.viewmodel.MainViewModel.Companion.SCREEN_TEMPLATE_DETAILS
 import com.tom.rv2ide.viewmodel.MainViewModel.Companion.SCREEN_TEMPLATE_LIST
+import com.tom.rv2ide.setup.updater.lsp.KotlinLspUpdater
 import com.tom.rv2ide.setup.updater.lsp.data.LSPProperties
 import java.io.File
 
@@ -97,7 +98,15 @@ class MainActivity : EdgeToEdgeIDEActivity() {
     }
     
     onBackPressedDispatcher.addCallback(this, onBackPressedCallback)
-    // Auto-update (aplikasi & Kotlin LSP) dihapus di fork ini.
+    // Komponen Kotlin LSP (completion/diagnostik Kotlin) tetap dicek/diunduh seperti aplikasi asli.
+    // Auto-update APLIKASI sendiri sudah dihapus di fork ini.
+    val updater = KotlinLspUpdater(this)
+    updater.checkForUpdates(LSPProperties.kotlinLspVersion)
+
+    // Sambungkan ulang ADB Wireless otomatis bila sudah pernah pairing.
+    com.tom.rv2ide.adbwireless.AdbAutoConnect.start(applicationContext)
+    // Perintah `adb pair/connect/devices/install/shell` di Terminal aplikasi.
+    com.tom.rv2ide.adbwireless.AdbBridge.start(applicationContext)
     
             
   }

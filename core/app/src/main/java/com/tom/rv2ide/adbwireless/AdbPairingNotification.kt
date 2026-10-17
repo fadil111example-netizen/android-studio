@@ -120,7 +120,7 @@ class AdbPairingReceiver : BroadcastReceiver() {
     AdbWireless.launch {
       try {
         val result = AdbWireless.pairAndConnect(app, host, port, code)
-        AdbPairingNotification.showResult(app, result.isSuccess, result.exceptionOrNull()?.message)
+        AdbPairingNotification.showResult(app, result.isSuccess, result.exceptionOrNull()?.let { AdbWireless.brief(it) })
         if (result.isSuccess) {
           AdbWireless.onPairedAndConnected?.invoke()
         }

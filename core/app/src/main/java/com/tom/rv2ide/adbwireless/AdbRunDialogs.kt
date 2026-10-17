@@ -20,6 +20,15 @@ object AdbRunDialogs {
   private fun dp(activity: Activity, value: Int): Int =
       (value * activity.resources.displayMetrics.density).toInt()
 
+  private fun copyToClipboard(activity: Activity, text: String) {
+    try {
+      val cm = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+      cm.setPrimaryClip(android.content.ClipData.newPlainText("adb error", text))
+    } catch (e: Throwable) {
+      // abaikan
+    }
+  }
+
   /** Dialog yang muncul saat tombol Run (play) ditekan. */
   fun showMethodChooser(activity: Activity, onChosen: (InstallMethod) -> Unit) {
     val methods = InstallMethod.values()
@@ -132,8 +141,12 @@ object AdbRunDialogs {
             if (result.isSuccess) {
               finish(true)
             } else {
+              val error = result.exceptionOrNull()
+              val full = if (error != null) AdbWireless.describe(error) else ""
+              copyToClipboard(activity, full)
               status.text =
-                  activity.getString(R.string.adbw_pair_failed, result.exceptionOrNull()?.message ?: "")
+                  activity.getString(R.string.adbw_pair_failed, error?.let { AdbWireless.brief(it) } ?: "") +
+                      "\n" + activity.getString(R.string.adbw_detail_copied)
             }
           }
         }
