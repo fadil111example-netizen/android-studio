@@ -89,6 +89,22 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
   override fun createContentView(parent: ViewGroup, attachToParent: Boolean) {
     _content = LayoutOnboardngSetupConfigBinding.inflate(layoutInflater, parent, attachToParent)
 
+    // Tombol restore: muat SDK/JDK/plugin yang sudah ada (arsip atau folder) tanpa download ulang.
+    val restoreButton =
+        com.google.android.material.button.MaterialButton(requireContext()).apply {
+          text = "Muat dari file / folder (restore)"
+          layoutParams =
+              androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT,
+                      ViewGroup.LayoutParams.WRAP_CONTENT,
+                  )
+                  .apply { topMargin = (8 * resources.displayMetrics.density).toInt() }
+          setOnClickListener {
+            (activity as? com.tom.rv2ide.activities.OnboardingActivity)?.openRestore()
+          }
+        }
+    content.connectionInfoContainer.addView(restoreButton, 0)
+
     content.apply {
       noConnection.root.setText(R.string.msg_no_internet)
       cellularConnection.root.setText(R.string.msg_connected_to_cellular)

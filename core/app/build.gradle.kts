@@ -94,7 +94,21 @@ android {
           customKeyAlias.isNotEmpty() &&
           customKeyPassword.isNotEmpty()
 
+  // Keystore tetap milik fork ini (signing/acs-fork.jks). Dengan tanda tangan yang SELALU sama,
+  // APK baru bisa di-install menimpa versi lama TANPA uninstall, jadi data (SDK, JDK, plugin,
+  // proyek) tidak hilang. Tanpa ini setiap build di GitHub Actions memakai debug key acak.
+  val forkKeystore = rootProject.file("signing/acs-fork.jks")
+  val useForkSigning = !useCustomSigning && forkKeystore.exists()
+
   signingConfigs {
+    if (useForkSigning) {
+      create("fork") {
+        storeFile = forkKeystore
+        storePassword = "android"
+        keyAlias = "acsfork"
+        keyPassword = "android"
+      }
+    }
     if (useCustomSigning) {
       create("custom") {
         storeFile = customStoreFile
@@ -114,12 +128,12 @@ android {
 
   buildTypes {
     debug {
-      signingConfig = signingConfigs.getByName(if (useCustomSigning) "custom" else "debug")
+      signingConfig = signingConfigs.getByName(if (useCustomSigning) "custom" else if (useForkSigning) "fork" else "debug")
     }
 
     release {
       isShrinkResources = false
-      signingConfig = signingConfigs.getByName(if (useCustomSigning) "custom" else "debug")
+      signingConfig = signingConfigs.getByName(if (useCustomSigning) "custom" else if (useForkSigning) "fork" else "debug")
     }
   }
   

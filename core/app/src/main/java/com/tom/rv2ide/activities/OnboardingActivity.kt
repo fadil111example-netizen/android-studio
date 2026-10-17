@@ -60,6 +60,18 @@ class OnboardingActivity : AppIntro2() {
         }
       }
 
+  private val restoreCallback =
+      registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (!isFinishing) {
+          reloadJdkDistInfo { tryNavigateToMainIfSetupIsCompleted() }
+        }
+      }
+
+  /** Dipanggil dari tombol "Muat dari file / folder" di halaman pemilihan SDK/JDK. */
+  fun openRestore() {
+    restoreCallback.launch(Intent(this, RestoreActivity::class.java))
+  }
+
   private val activityScope = CoroutineScope(Dispatchers.Main + CoroutineName("OnboardingActivity"))
 
   private var listJdkInstallationsJob: Job? = null

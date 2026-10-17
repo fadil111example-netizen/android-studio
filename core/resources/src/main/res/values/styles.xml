@@ -19,7 +19,27 @@
 
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-  <style name="Theme.AndroidIDE.Material3" parent="Theme.Material3.Light.NoActionBar"/>
+  <style name="Theme.AndroidIDE.Material3" parent="Theme.Material3.Light.NoActionBar">
+    <item name="colorPrimary">#00694B</item>
+    <item name="colorOnPrimary">#FFFFFF</item>
+    <item name="colorPrimaryContainer">#86F8C7</item>
+    <item name="colorOnPrimaryContainer">#002115</item>
+    <item name="colorSecondary">#4D6357</item>
+    <item name="colorOnSecondary">#FFFFFF</item>
+    <item name="colorSecondaryContainer">#CFE9D9</item>
+    <item name="colorOnSecondaryContainer">#0A1F15</item>
+    <item name="colorTertiary">#3D6373</item>
+    <item name="colorOnTertiary">#FFFFFF</item>
+    <item name="colorTertiaryContainer">#C1E8FB</item>
+    <item name="colorOnTertiaryContainer">#001F29</item>
+    <item name="colorSurface">#F5FBF5</item>
+    <item name="colorOnSurface">#171D19</item>
+    <item name="colorSurfaceVariant">#DCE5DD</item>
+    <item name="colorOnSurfaceVariant">#404943</item>
+    <item name="colorOutline">#707973</item>
+    <item name="android:colorBackground">#F5FBF5</item>
+    <item name="colorOnBackground">#171D19</item>
+  </style>
 
   <style name="Theme.AndroidIDE.Base" parent="Theme.AndroidIDE.Material3">
     <item name="android:textCursorDrawable">@drawable/textfield_cursor</item>

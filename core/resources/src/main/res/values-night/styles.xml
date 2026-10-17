@@ -17,7 +17,27 @@
   ~   along with AndroidIDE.  If not, see <https://www.gnu.org/licenses/>.
   -->
 
-  <style name="Theme.AndroidIDE.Material3" parent="Theme.Material3.Dark.NoActionBar"/>
+  <style name="Theme.AndroidIDE.Material3" parent="Theme.Material3.Dark.NoActionBar">
+    <item name="colorPrimary">#6BDBAC</item>
+    <item name="colorOnPrimary">#003826</item>
+    <item name="colorPrimaryContainer">#005138</item>
+    <item name="colorOnPrimaryContainer">#86F8C7</item>
+    <item name="colorSecondary">#B3CCBD</item>
+    <item name="colorOnSecondary">#1F352A</item>
+    <item name="colorSecondaryContainer">#354B40</item>
+    <item name="colorOnSecondaryContainer">#CFE9D9</item>
+    <item name="colorTertiary">#A5CCDF</item>
+    <item name="colorOnTertiary">#073543</item>
+    <item name="colorTertiaryContainer">#244B5B</item>
+    <item name="colorOnTertiaryContainer">#C1E8FB</item>
+    <item name="colorSurface">#0F1511</item>
+    <item name="colorOnSurface">#DFE4DD</item>
+    <item name="colorSurfaceVariant">#404943</item>
+    <item name="colorOnSurfaceVariant">#BFC9C2</item>
+    <item name="colorOutline">#8A938C</item>
+    <item name="android:colorBackground">#0F1511</item>
+    <item name="colorOnBackground">#DFE4DD</item>
+  </style>
 
   <style name="Theme.AndroidIDE" parent="Theme.AndroidIDE.Styled">
     <!-- Left drawer. -->

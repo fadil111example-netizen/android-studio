@@ -417,7 +417,7 @@ class QuickRunWithCancellationAction(context: Context, override val order: Int) 
     }
 
     withContext(Dispatchers.Main) { dialog.setMessage(activity.getString(R.string.adbw_installing)) }
-    val result = AdbWireless.installApk(activity, apk)
+    val result = AdbWireless.installApk(activity, apk, applicationId)
     withContext(Dispatchers.Main) {
       dialog.dismiss()
       when (result) {

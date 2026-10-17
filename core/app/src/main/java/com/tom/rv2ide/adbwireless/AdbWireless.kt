@@ -232,22 +232,27 @@ object AdbWireless {
    * Menginstal APK lewat ADB (setara `adb install -r`). APK dikirim lewat stdin:
    * `cmd package install -S <ukuran>`, tanpa perlu menyalin file ke /data/local/tmp.
    */
-  suspend fun installApk(context: Context, apk: File): AdbInstallResult =
+  suspend fun installApk(context: Context, apk: File, packageName: String? = null): AdbInstallResult =
       withContext(Dispatchers.IO) {
         try {
           val m = manager(context)
           if (!m.isConnected()) connect(context)
           val stream = m.openStream("exec:cmd package install -r -t -S ${apk.length()}")
+          val text = StringBuilder()
           try {
-            val out = stream.openOutputStream()
-            apk.inputStream().use { it.copyTo(out, 64 * 1024) }
-            out.flush()
-            val text = stream.openInputStream().bufferedReader().readText().trim()
-            log.info("adb install output: {}", text)
-            if (text.contains("Success", ignoreCase = true)) {
-              AdbInstallResult.Success
-            } else {
-              AdbInstallResult.Failure(text.ifEmpty { "Unknown install failure" })
+            // adbd boleh menutup stream begitu semua byte diterima, jadi "Stream closed" saat
+            // menulis/membaca BUKAN berarti install gagal. Hasil akhirnya diverifikasi di bawah.
+            try {
+              val out = stream.openOutputStream()
+              apk.inputStream().use { it.copyTo(out, 64 * 1024) }
+              out.flush()
+            } catch (e: IOException) {
+              log.info("write ended early: {}", e.message)
+            }
+            try {
+              stream.openInputStream().bufferedReader().forEachLine { text.appendLine(it) }
+            } catch (e: IOException) {
+              log.info("read ended: {}", e.message)
             }
           } finally {
             try {
@@ -256,11 +261,30 @@ object AdbWireless {
               // abaikan
             }
           }
+
+          val output = text.toString().trim()
+          log.info("adb install output: {}", output)
+          when {
+            output.contains("Success", ignoreCase = true) -> AdbInstallResult.Success
+            output.contains("Failure", ignoreCase = true) || output.contains("Error", ignoreCase = true) ->
+                AdbInstallResult.Failure(output)
+            // Output kosong: cek langsung apakah paketnya sudah terpasang.
+            packageName != null && isPackageInstalled(context, packageName) -> AdbInstallResult.Success
+            packageName == null && output.isEmpty() -> AdbInstallResult.Success
+            else -> AdbInstallResult.Failure(output.ifEmpty { "Install tidak terkonfirmasi" })
+          }
         } catch (e: Throwable) {
           log.error("ADB install failed", e)
           saveErrorLog(context, describe(e))
           AdbInstallResult.Failure(brief(e))
         }
+      }
+
+  private suspend fun isPackageInstalled(context: Context, packageName: String): Boolean =
+      try {
+        shell(context, "pm path $packageName").contains("package:")
+      } catch (e: Throwable) {
+        false
       }
 
   /** Menjalankan satu perintah `adb shell <command>` dan mengembalikan outputnya. */
@@ -270,7 +294,13 @@ object AdbWireless {
         if (!m.isConnected()) connect(context)
         val stream = m.openStream("shell:$command")
         try {
-          stream.openInputStream().bufferedReader().readText()
+          val sb = StringBuilder()
+          try {
+            stream.openInputStream().bufferedReader().forEachLine { sb.appendLine(it) }
+          } catch (e: IOException) {
+            // stream ditutup oleh adbd setelah perintah selesai
+          }
+          sb.toString()
         } finally {
           try {
             stream.close()
