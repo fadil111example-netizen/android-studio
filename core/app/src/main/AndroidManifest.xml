@@ -72,6 +72,10 @@
       android:theme="@style/Theme.AndroidIDE" />
     <activity
       android:exported="false"
+      android:name=".activities.ApkToSourceActivity"
+      android:theme="@style/Theme.AndroidIDE" />
+    <activity
+      android:exported="false"
       android:name=".activities.MainActivity"
       android:theme="@style/Theme.AndroidIDE" />
     <activity

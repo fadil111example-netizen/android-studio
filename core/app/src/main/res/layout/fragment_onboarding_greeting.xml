@@ -23,15 +23,14 @@
   <com.google.android.material.imageview.ShapeableImageView
     android:id="@+id/icon"
     android:layout_width="0dp"
-    android:layout_height="150dp"
-    android:src="@drawable/ic_launcher_fg_vector"
+    android:layout_height="140dp"
+    android:src="@drawable/ic_app_logo"
     app:layout_constraintBottom_toBottomOf="parent"
     app:layout_constraintEnd_toEndOf="parent"
     app:layout_constraintStart_toStartOf="parent"
     app:layout_constraintTop_toTopOf="parent"
     app:layout_constraintVertical_bias="0.4"
-    app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.Full"
-    app:tint="?attr/colorOnSurface" />
+    app:shapeAppearance="@style/ShapeAppearance.Material3.Corner.Full" />
 
   <com.google.android.material.textview.MaterialTextView
     android:id="@+id/title"
@@ -39,8 +38,8 @@
     android:layout_height="wrap_content"
     android:layout_margin="16dp"
     android:gravity="center"
-    android:text="@string/greeting_title"
-    android:textAppearance="@style/TextAppearance.Material3.DisplayMedium"
+    android:text="@string/greeting_title_fork"
+    android:textAppearance="@style/TextAppearance.Material3.DisplaySmall"
     app:layout_constraintEnd_toEndOf="parent"
     app:layout_constraintStart_toStartOf="parent"
     app:layout_constraintTop_toBottomOf="@id/icon" />
@@ -52,7 +51,7 @@
     android:layout_marginStart="32dp"
     android:layout_marginEnd="32dp"
     android:gravity="center"
-    android:text="@string/greeting_subtitle"
+    android:text="@string/greeting_subtitle_fork"
     android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
     app:layout_constraintEnd_toEndOf="parent"
     app:layout_constraintStart_toStartOf="parent"

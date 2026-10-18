@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo splash: segi enam bergradasi hijau + tombol play (canvas 288dp sesuai standar splash) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <path android:pathData="M144,64L212,103L212,181L144,220L76,181L76,103Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="144"
+                android:startY="64"
+                android:endX="144"
+                android:endY="220"
+                android:startColor="#FF6EF0A8"
+                android:endColor="#FF1FB86B" />
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M122,108L122,176L180,142Z" />
+</vector>

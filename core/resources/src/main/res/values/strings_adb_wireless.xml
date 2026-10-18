@@ -25,4 +25,7 @@
   <string name="adbw_notif_action">Enter pairing code</string>
   <string name="adbw_detail_copied">Error details copied to clipboard.</string>
   <string name="btn_backup_restore">Backup &amp; Restore</string>
+  <string name="greeting_title_fork">Android Studio</string>
+  <string name="greeting_subtitle_fork">Build, run and ship Android apps — right from your phone.</string>
+  <string name="btn_apk_to_source">APK to Source Code</string>
 </resources>
