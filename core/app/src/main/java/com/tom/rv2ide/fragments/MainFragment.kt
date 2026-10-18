@@ -120,6 +120,10 @@ class MainFragment : BaseFragment() {
               MainScreenAction.ACTION_DONATE -> {
                 startActivity(Intent(requireActivity(), IDEConfigurations::class.java))
               }
+              MainScreenAction.ACTION_BACKUP ->
+                  startActivity(
+                      Intent(requireActivity(), com.tom.rv2ide.activities.RestoreActivity::class.java)
+                  )
               MainScreenAction.ACTION_DOCS -> BaseApplication.getBaseInstance().openDocs()
             }
           }

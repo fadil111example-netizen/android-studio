@@ -47,6 +47,7 @@ constructor(
     const val ACTION_PREFERENCES = 4
     const val ACTION_DONATE = 5
     const val ACTION_DOCS = 6
+    const val ACTION_BACKUP = 7
 
     /** Get all main screen actions. */
     @JvmStatic
@@ -75,6 +76,9 @@ constructor(
 
         val docs = MainScreenAction(ACTION_DOCS, R.string.btn_docs, R.drawable.ic_docs)
 
+        val backup =
+            MainScreenAction(ACTION_BACKUP, R.string.btn_backup_restore, R.drawable.ic_folder)
+
         Collections.addAll(
             this,
             createProject,
@@ -83,6 +87,7 @@ constructor(
             openTerminal,
             preferences,
             donate,
+            backup,
             docs,
         )
       }

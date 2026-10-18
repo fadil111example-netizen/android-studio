@@ -1,6 +1,10 @@
 package com.tom.rv2ide.activities
 
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
+import android.view.WindowManager
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -18,6 +22,14 @@ import com.tom.rv2ide.app.IDEApplication
 import com.tom.rv2ide.utils.Environment
 import java.nio.file.Files
 import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
+import java.io.FileOutputStream
+import java.io.FilterInputStream
+import java.io.OutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -27,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.tukaani.xz.XZInputStream
 
@@ -44,6 +57,20 @@ class RestoreActivity : AppCompatActivity() {
 
   private val sources = mutableListOf<Source>()
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+  private class RestoreCancelled : RuntimeException("Dibatalkan")
+
+  @Volatile private var cancelled = false
+  @Volatile private var busyFlag = false
+  @Volatile private var totalBytes = 0L
+  @Volatile private var phase = ""
+  @Volatile private var phaseStart = 0L
+  private val doneBytes = AtomicLong(0)
+  private var wakeLock: PowerManager.WakeLock? = null
+
+  private lateinit var statusView: TextView
+  private lateinit var btnBackup: MaterialButton
+  private lateinit var btnCancel: MaterialButton
 
   private lateinit var listView: TextView
   private lateinit var logView: TextView
@@ -78,6 +105,8 @@ class RestoreActivity : AppCompatActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // Layar tetap menyala selama proses panjang (restore/backup bisa beberapa menit).
+    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     buildUi()
     refreshList()
   }
@@ -127,8 +156,30 @@ class RestoreActivity : AppCompatActivity() {
     btnStart = button("Mulai muat") { startRestore() }
     root.addView(btnStart)
 
-    progress = ProgressBar(this).apply { isIndeterminate = true; visibility = android.view.View.GONE }
-    root.addView(progress)
+    btnBackup = button("Buat backup lengkap (1 tombol)") { startBackup() }
+    root.addView(btnBackup)
+
+    btnCancel =
+        button("Batal") {
+          cancelled = true
+          log("Membatalkan, mohon tunggu sebentar ...")
+        }
+    btnCancel.visibility = android.view.View.GONE
+    root.addView(btnCancel)
+
+    progress =
+        ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+          max = 1000
+          isIndeterminate = true
+          visibility = android.view.View.GONE
+        }
+    root.addView(
+        progress,
+        LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { topMargin = dp(10) },
+    )
+    statusView = TextView(this).apply { textSize = 13f; visibility = android.view.View.GONE }
+    root.addView(statusView)
 
     logView =
         TextView(this).apply {
@@ -136,9 +187,7 @@ class RestoreActivity : AppCompatActivity() {
           textSize = 12f
           setTextIsSelectable(true)
         }
-    logScroll = ScrollView(this)
-    logScroll.addView(logView)
-    root.addView(logScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+    root.addView(logView)
 
     btnJdk =
         button("Instal JDK otomatis (hanya JDK, 1 tombol)") {
@@ -161,7 +210,12 @@ class RestoreActivity : AppCompatActivity() {
     btnDone.isEnabled = false
     root.addView(btnDone)
 
-    setContentView(root)
+    // Seluruh layar bisa di-scroll agar semua tombol & log terlihat di HP kecil.
+    logScroll = ScrollView(this).apply {
+      isFillViewport = true
+      addView(root)
+    }
+    setContentView(logScroll)
   }
 
   private fun button(label: String, onClick: () -> Unit): MaterialButton =
@@ -192,10 +246,14 @@ class RestoreActivity : AppCompatActivity() {
 
   private fun setBusy(busy: Boolean) {
     runOnUiThread {
-      progress.visibility = if (busy) android.view.View.VISIBLE else android.view.View.GONE
+      val v = if (busy) android.view.View.VISIBLE else android.view.View.GONE
+      progress.visibility = v
+      statusView.visibility = v
+      btnCancel.visibility = v
       btnArchive.isEnabled = !busy
       btnFolder.isEnabled = !busy
       btnStart.isEnabled = !busy
+      btnBackup.isEnabled = !busy
     }
   }
 
@@ -226,19 +284,116 @@ class RestoreActivity : AppCompatActivity() {
       log("Pilih minimal satu file atau folder dulu.")
       return
     }
-    setBusy(true)
+    beginWork()
     scope.launch {
       var placed = 0
       try {
         placed = process()
+      } catch (c: RestoreCancelled) {
+        log("Dibatalkan. Berkas sementara dibersihkan.")
       } catch (t: Throwable) {
         log("ERROR: ${t.javaClass.simpleName}: ${t.message}")
       } finally {
-        setBusy(false)
+        endWork()
         runOnUiThread { btnDone.isEnabled = placed > 0 }
       }
     }
   }
+
+  private fun beginWork() {
+    cancelled = false
+    busyFlag = true
+    doneBytes.set(0)
+    totalBytes = 0
+    phase = ""
+    phaseStart = System.currentTimeMillis()
+    acquireWakeLock()
+    setBusy(true)
+    startMonitor()
+  }
+
+  private fun endWork() {
+    busyFlag = false
+    releaseWakeLock()
+    setBusy(false)
+  }
+
+  private fun checkCancel() {
+    if (cancelled) throw RestoreCancelled()
+  }
+
+  private fun acquireWakeLock() {
+    try {
+      val pm = getSystemService(POWER_SERVICE) as PowerManager
+      wakeLock =
+          pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "acs:restore").apply {
+            setReferenceCounted(false)
+            acquire(3L * 60 * 60 * 1000)
+          }
+    } catch (e: Throwable) {
+      // abaikan
+    }
+  }
+
+  private fun releaseWakeLock() {
+    try {
+      wakeLock?.let { if (it.isHeld) it.release() }
+    } catch (e: Throwable) {
+      // abaikan
+    }
+    wakeLock = null
+  }
+
+  private fun fmt(b: Long): String =
+      when {
+        b >= 1L shl 30 -> String.format(Locale.US, "%.2f GB", b / 1073741824.0)
+        b >= 1L shl 20 -> String.format(Locale.US, "%.1f MB", b / 1048576.0)
+        else -> "${b / 1024} KB"
+      }
+
+  private fun fmtTime(sec: Long): String = if (sec >= 60) "${sec / 60} mnt ${sec % 60} dtk" else "$sec dtk"
+
+  /** Memperbarui progres (persen, ukuran, perkiraan sisa waktu) beberapa kali per detik. */
+  private fun startMonitor() {
+    scope.launch {
+      while (busyFlag) {
+        delay(400)
+        val total = totalBytes
+        val done = doneBytes.get()
+        val elapsed = (System.currentTimeMillis() - phaseStart).coerceAtLeast(1)
+        val text: String
+        var pct = -1
+        if (total > 0) {
+          pct = (done * 1000 / total).toInt().coerceIn(0, 1000)
+          val speed = done * 1000.0 / elapsed
+          val remain = if (speed > 1) ((total - done) / speed).toLong() else -1L
+          text =
+              "$phase\n${pct / 10}% · ${fmt(done)} / ${fmt(total)}" +
+                  (if (remain >= 0) " · sisa ±${fmtTime(remain)}" else "")
+        } else {
+          text = "$phase\n$done entri"
+        }
+        runOnUiThread {
+          statusView.text = text
+          if (pct >= 0) {
+            progress.isIndeterminate = false
+            progress.progress = pct
+          } else {
+            progress.isIndeterminate = true
+          }
+        }
+      }
+    }
+  }
+
+  private fun querySize(uri: Uri): Long =
+      try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use {
+          if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else -1L
+        } ?: -1L
+      } catch (e: Throwable) {
+        -1L
+      }
 
   private fun process(): Int {
     val staging = File(Environment.HOME, ".restore_tmp")
@@ -246,12 +401,44 @@ class RestoreActivity : AppCompatActivity() {
     staging.mkdirs()
 
     try {
+      // Cek ruang kosong sebelum mulai.
+      val free = Environment.HOME.usableSpace
+      var strict = 0L
+      var estimate = 0L
+      for (s in sources) {
+        if (s.isFolder) continue
+        val sz = querySize(s.uri)
+        if (sz <= 0) continue
+        strict += (sz * 1.05).toLong()
+        estimate +=
+            when {
+              s.name.endsWith(".tar", true) -> (sz * 1.1).toLong()
+              s.name.endsWith(".zip", true) -> sz * 2
+              else -> sz * 3
+            }
+      }
+      log("Ruang kosong: ${fmt(free)}" + (if (estimate > 0) ", perkiraan kebutuhan: ${fmt(estimate)}" else ""))
+      if (strict > 0 && free < strict) {
+        log("RUANG TIDAK CUKUP: butuh minimal ${fmt(strict)}, tersedia ${fmt(free)}. Kosongkan ruang lalu coba lagi.")
+        return 0
+      }
+      if (estimate > 0 && free < estimate) log("Peringatan: ruang kosong mungkin kurang untuk arsip terkompresi.")
+
       sources.forEachIndexed { i, s ->
+        checkCancel()
         val dir = File(staging, "src$i-${s.name.replace('/', '_')}")
         dir.mkdirs()
         log("Membaca ${s.name} ...")
+        phase = "Membaca ${s.name} (${i + 1}/${sources.size})"
+        phaseStart = System.currentTimeMillis()
+        doneBytes.set(0)
+        totalBytes = if (s.isFolder) 0L else maxOf(0L, querySize(s.uri))
         if (s.isFolder) copyFolder(s.uri, dir) else extractArchive(s.uri, dir)
       }
+      phase = "Menempatkan komponen ..."
+      phaseStart = System.currentTimeMillis()
+      doneBytes.set(0)
+      totalBytes = 0
 
       val found = mutableListOf<Component>()
       scan(staging, 0, found)
@@ -268,6 +455,7 @@ class RestoreActivity : AppCompatActivity() {
         log("Menempatkan [${c.kind}] -> ${c.dest.absolutePath}")
         mergeInto(c.src, c.dest)
         fixExecutables(c.dest)
+        if (c.kind == "Kunci ADB") markAdbPaired()
         if (c.kind == "JDK") {
           Environment.JAVA_HOME = c.dest
           Environment.JAVA = File(c.dest, "bin/java")
@@ -277,10 +465,14 @@ class RestoreActivity : AppCompatActivity() {
       log(if (ok > 0) "SELESAI: $ok komponen berhasil dimuat." else "Tidak ada yang diterima.")
 
       // Aplikasi menganggap JDK 'terpasang' hanya jika `java` benar-benar bisa dijalankan.
+      var jdkOk = false
       val jdkHome = File(Environment.PREFIX, "lib/jvm").listFiles()?.firstOrNull { File(it, "bin/java").isFile }
       if (jdkHome != null) {
         val problem = probeJdk(jdkHome)
         if (problem == null) {
+          jdkOk = true
+          Environment.JAVA_HOME = jdkHome
+          Environment.JAVA = File(jdkHome, "bin/java")
           log("Cek JDK: OK (java berjalan normal).")
         } else {
           runOnUiThread { btnJdk.visibility = android.view.View.VISIBLE }
@@ -295,6 +487,32 @@ class RestoreActivity : AppCompatActivity() {
       if (jdkHome == null) {
         runOnUiThread { btnJdk.visibility = android.view.View.VISIBLE }
         log("JDK belum ada. Tekan 'Instal JDK otomatis' di bawah (hanya JDK yang diunduh).")
+      }
+
+      // Ringkasan akhir
+      val sdkOk = File(Environment.ANDROID_HOME, "platforms").listFiles()?.any { File(it, "android.jar").isFile } == true
+      val btOk = File(Environment.ANDROID_HOME, "build-tools").listFiles()?.isNotEmpty() == true
+      val lspOk = File(Environment.HOME, "acs/servers/kotlin").isDirectory
+      val gradleOk = File(Environment.HOME, ".gradle").isDirectory
+      log("— Ringkasan —")
+      log((if (sdkOk) "✓" else "✗") + " Android SDK (platforms)")
+      log((if (btOk) "✓" else "✗") + " Build-tools")
+      log((if (jdkOk) "✓" else "✗") + " JDK (java berjalan)")
+      log((if (lspOk) "✓" else "–") + " Kotlin language server")
+      log((if (gradleOk) "✓" else "–") + " Gradle")
+      if (ok > 0 && sdkOk && btOk && jdkOk) {
+        log("Semua siap. Lanjut otomatis dalam beberapa detik ...")
+        runOnUiThread {
+          Handler(Looper.getMainLooper()).postDelayed(
+              {
+                if (!isFinishing) {
+                  setResult(RESULT_OK)
+                  finish()
+                }
+              },
+              2500,
+          )
+        }
       }
       return ok
     } finally {
@@ -327,7 +545,7 @@ class RestoreActivity : AppCompatActivity() {
 
   private fun subdirs(d: File, vararg names: String) = names.count { File(d, it).isDirectory }
 
-  private fun classify(d: File): Component? {
+  private fun classify(d: File, depth: Int): Component? {
     val n = d.name
     val home = Environment.HOME
     val sdkMarkers = subdirs(d, "platforms", "build-tools", "platform-tools", "cmdline-tools")
@@ -345,9 +563,11 @@ class RestoreActivity : AppCompatActivity() {
       val major = jdkMajor(d) ?: "17"
       return Component("JDK", d, File(Environment.PREFIX, "lib/jvm/java-$major-openjdk"))
     }
-    if (n == ".gradle") return Component("Gradle", d, File(home, ".gradle"))
-    if (n == "plugins") return Component("Plugins", d, File(home, "plugins"))
-    if (n == "ACSProjects") return Component("Proyek ACS", d, File(home, "ACSProjects"))
+    if (depth <= 2 && n == "adb" && File(d, "adb_private_key.pk8").isFile)
+        return Component("Kunci ADB", d, File(home.parentFile, "adb"))
+    if (depth <= 2 && n == ".gradle") return Component("Gradle", d, File(home, ".gradle"))
+    if (depth <= 2 && n == "plugins") return Component("Plugins", d, File(home, "plugins"))
+    if (depth <= 2 && n == "ACSProjects") return Component("Proyek ACS", d, File(home, "ACSProjects"))
     if (n.startsWith("android-") && File(d, "android.jar").isFile)
         return Component("Platform SDK", d, File(Environment.ANDROID_HOME, "platforms/$n"))
     if (File(d, "aapt2").isFile && n.firstOrNull()?.isDigit() == true)
@@ -363,7 +583,7 @@ class RestoreActivity : AppCompatActivity() {
     if (depth > 6) return
     val children = dir.listFiles()?.filter { it.isDirectory } ?: return
     for (c in children) {
-      val comp = classify(c)
+      val comp = classify(c, depth)
       if (comp != null) out.add(comp) else scan(c, depth + 1, out)
     }
   }
@@ -428,6 +648,7 @@ class RestoreActivity : AppCompatActivity() {
       }
 
   private fun mergeInto(src: File, dest: File) {
+    checkCancel()
     if (isLink(src)) {
       try {
         val target = Files.readSymbolicLink(src.toPath()).toString()
@@ -494,6 +715,8 @@ class RestoreActivity : AppCompatActivity() {
         )
     contentResolver.query(children, cols, null, null, null)?.use { c ->
       while (c.moveToNext()) {
+        checkCancel()
+        doneBytes.incrementAndGet()
         val id = c.getString(0)
         val name = c.getString(1)
         val mime = c.getString(2)
@@ -512,7 +735,12 @@ class RestoreActivity : AppCompatActivity() {
   }
 
   private fun extractArchive(uri: Uri, dest: File) {
-    val raw = BufferedInputStream(contentResolver.openInputStream(uri) ?: throw IOException("Tidak bisa membuka file"), 256 * 1024)
+    val counting =
+        CountingInputStream(
+            contentResolver.openInputStream(uri) ?: throw IOException("Tidak bisa membuka file"),
+            doneBytes,
+        )
+    val raw = BufferedInputStream(counting, 256 * 1024)
     raw.use { input ->
       input.mark(8)
       val magic = ByteArray(6)
@@ -541,6 +769,7 @@ class RestoreActivity : AppCompatActivity() {
     val zip = ZipInputStream(input)
     var count = 0
     while (true) {
+      checkCancel()
       val e = zip.nextEntry ?: break
       val f = safeFile(dest, e.name)
       if (e.isDirectory) {
@@ -589,6 +818,7 @@ class RestoreActivity : AppCompatActivity() {
     var longName: String? = null
     var count = 0
     while (true) {
+      checkCancel()
       if (!readFully(input, header)) break
       if (header.all { it == 0.toByte() }) break
 
@@ -665,6 +895,207 @@ class RestoreActivity : AppCompatActivity() {
         else -> {}
       }
       skipFully(input, size + padding)
+    }
+  }
+
+  // ----------------------------------------------------------------------- ADB (kunci pairing)
+
+  private fun markAdbPaired() {
+    try {
+      getSharedPreferences("adb_wireless", MODE_PRIVATE).edit().putBoolean("paired", true).apply()
+    } catch (e: Throwable) {
+      // abaikan
+    }
+  }
+
+  // ----------------------------------------------------------------------------- backup
+
+  private fun startBackup() {
+    beginWork()
+    scope.launch {
+      try {
+        val out = doBackup()
+        log("BACKUP SELESAI: ${out.absolutePath} (${fmt(out.length())})")
+        log("Salin file ini ke tempat lain (Drive/komputer) agar aman jika HP di-reset.")
+      } catch (c: RestoreCancelled) {
+        log("Backup dibatalkan. File sementara dihapus.")
+      } catch (t: Throwable) {
+        log("ERROR backup: ${t.javaClass.simpleName}: ${t.message}")
+      } finally {
+        endWork()
+      }
+    }
+  }
+
+  private fun backupExcluded(rel: String): Boolean =
+      rel == "usr/tmp" ||
+          rel.startsWith("usr/tmp/") ||
+          rel.startsWith("home/.restore_tmp") ||
+          (rel.startsWith("usr/var/cache/apt/archives/") && rel.endsWith(".deb")) ||
+          rel == "adb/bridge" ||
+          rel == "adb/last_error.txt"
+
+  private fun sizeWalk(f: File, rel: String): Long {
+    checkCancel()
+    if (backupExcluded(rel) || isLink(f)) return 0
+    if (f.isDirectory) {
+      var sum = 0L
+      f.listFiles()?.forEach { sum += sizeWalk(it, "$rel/${it.name}") }
+      return sum
+    }
+    return if (f.isFile) f.length() else 0
+  }
+
+  private fun doBackup(): File {
+    val filesDir = Environment.HOME.parentFile ?: throw IOException("Folder data tidak ditemukan")
+    val roots =
+        listOf("usr", "home", "adb").map { File(filesDir, it) to it }.filter { it.first.isDirectory }
+
+    phase = "Menghitung ukuran ..."
+    phaseStart = System.currentTimeMillis()
+    doneBytes.set(0)
+    totalBytes = 0
+    var total = 0L
+    roots.forEach { total += sizeWalk(it.first, it.second) }
+
+    val dl = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+    dl.mkdirs()
+    if (dl.usableSpace < total) {
+      throw IOException("Ruang kosong kurang: butuh ±${fmt(total)}, tersedia ${fmt(dl.usableSpace)}")
+    }
+
+    val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
+    val outFile = File(dl, "acs-full-$stamp.tar")
+    val part = File(dl, outFile.name + ".part")
+
+    phase = "Membuat backup → ${outFile.name}"
+    phaseStart = System.currentTimeMillis()
+    doneBytes.set(0)
+    totalBytes = total
+    log("Membuat backup (${fmt(total)}) ...")
+
+    try {
+      BufferedOutputStream(FileOutputStream(part), 256 * 1024).use { out ->
+        roots.forEach { tarWalk(out, it.first, it.second) }
+        out.write(ByteArray(1024))
+      }
+      if (!part.renameTo(outFile)) throw IOException("Gagal memberi nama file backup")
+    } catch (t: Throwable) {
+      part.delete()
+      throw t
+    }
+    return outFile
+  }
+
+  private fun tarWalk(out: OutputStream, f: File, rel: String) {
+    checkCancel()
+    if (backupExcluded(rel)) return
+    val mtime = f.lastModified() / 1000
+    when {
+      isLink(f) -> {
+        val target = Files.readSymbolicLink(f.toPath()).toString()
+        tarHeader(out, rel, 0, 511, '2', target, mtime)
+      }
+      f.isDirectory -> {
+        tarHeader(out, "$rel/", 0, 493, '5', "", mtime)
+        f.listFiles()?.sortedBy { it.name }?.forEach { tarWalk(out, it, "$rel/${it.name}") }
+      }
+      f.isFile -> {
+        val size = f.length()
+        if (size > 8589934591L) {
+          log("Dilewati (terlalu besar): $rel")
+          return
+        }
+        tarHeader(out, rel, size, if (f.canExecute()) 493 else 420, '0', "", mtime)
+        var written = 0L
+        try {
+          f.inputStream().use { ins ->
+            val buf = ByteArray(64 * 1024)
+            while (written < size) {
+              val r = ins.read(buf, 0, minOf(buf.size.toLong(), size - written).toInt())
+              if (r < 0) break
+              out.write(buf, 0, r)
+              written += r
+              doneBytes.addAndGet(r.toLong())
+            }
+          }
+        } catch (e: IOException) {
+          // file berubah / tidak terbaca: sisanya diisi nol agar arsip tetap utuh
+        }
+        var missing = size - written
+        if (missing > 0) {
+          val zeros = ByteArray(8192)
+          while (missing > 0) {
+            val n = minOf(zeros.size.toLong(), missing).toInt()
+            out.write(zeros, 0, n)
+            missing -= n
+          }
+        }
+        val pad = ((512 - size % 512) % 512).toInt()
+        if (pad > 0) out.write(ByteArray(pad))
+      }
+      else -> {}
+    }
+  }
+
+  private fun tarHeader(out: OutputStream, name: String, size: Long, mode: Int, type: Char, link: String, mtime: Long) {
+    var nameBytes = name.toByteArray(Charsets.UTF_8)
+    if (nameBytes.size > 100) {
+      // GNU long name: entri 'L' berisi nama lengkap
+      val data = nameBytes + byteArrayOf(0)
+      tarRaw(out, "././@LongLink".toByteArray(), data.size.toLong(), 0, 'L', ByteArray(0), 0)
+      out.write(data)
+      val pad = ((512 - data.size % 512) % 512)
+      if (pad > 0) out.write(ByteArray(pad))
+      nameBytes = nameBytes.copyOf(100)
+    }
+    val linkBytes = link.toByteArray(Charsets.UTF_8).let { if (it.size > 100) it.copyOf(100) else it }
+    tarRaw(out, nameBytes, size, mode, type, linkBytes, mtime)
+  }
+
+  private fun tarRaw(out: OutputStream, name: ByteArray, size: Long, mode: Int, type: Char, link: ByteArray, mtime: Long) {
+    val h = ByteArray(512)
+    System.arraycopy(name, 0, h, 0, minOf(name.size, 100))
+    putOctal(h, 100, 8, mode.toLong())
+    putOctal(h, 108, 8, 0)
+    putOctal(h, 116, 8, 0)
+    putOctal(h, 124, 12, size)
+    putOctal(h, 136, 12, mtime)
+    for (i in 148 until 156) h[i] = ' '.code.toByte()
+    h[156] = type.code.toByte()
+    System.arraycopy(link, 0, h, 157, minOf(link.size, 100))
+    "ustar".toByteArray().copyInto(h, 257)
+    h[263] = '0'.code.toByte()
+    h[264] = '0'.code.toByte()
+    var sum = 0L
+    for (b in h) sum += (b.toInt() and 0xFF)
+    val chk = String.format(Locale.US, "%06o", sum).toByteArray()
+    chk.copyInto(h, 148)
+    h[154] = 0
+    h[155] = ' '.code.toByte()
+    out.write(h)
+  }
+
+  private fun putOctal(h: ByteArray, off: Int, len: Int, v: Long) {
+    val str = java.lang.Long.toString(v, 8).padStart(len - 1, '0')
+    val b = str.toByteArray()
+    b.copyInto(h, off, 0, minOf(b.size, len - 1))
+    h[off + len - 1] = 0
+  }
+
+  /** Menghitung byte mentah yang dibaca dari arsip untuk progres. */
+  private class CountingInputStream(input: InputStream, private val counter: AtomicLong) :
+      FilterInputStream(input) {
+    override fun read(): Int {
+      val r = super.read()
+      if (r >= 0) counter.incrementAndGet()
+      return r
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+      val r = super.read(b, off, len)
+      if (r > 0) counter.addAndGet(r.toLong())
+      return r
     }
   }
 }

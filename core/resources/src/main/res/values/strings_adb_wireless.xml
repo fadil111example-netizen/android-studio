@@ -24,4 +24,5 @@
   <string name="adbw_notif_text">Enter the pairing code shown in Settings.</string>
   <string name="adbw_notif_action">Enter pairing code</string>
   <string name="adbw_detail_copied">Error details copied to clipboard.</string>
+  <string name="btn_backup_restore">Backup &amp; Restore</string>
 </resources>

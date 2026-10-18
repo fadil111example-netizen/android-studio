@@ -24,4 +24,5 @@
   <string name="adbw_notif_text">Masukkan kode pairing yang tampil di Pengaturan.</string>
   <string name="adbw_notif_action">Masukkan kode pairing</string>
   <string name="adbw_detail_copied">Detail error disalin ke clipboard, tempel ke chat untuk dianalisis.</string>
+  <string name="btn_backup_restore">Backup &amp; Restore</string>
 </resources>
