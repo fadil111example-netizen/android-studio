@@ -17,6 +17,7 @@
 
 package com.tom.rv2ide.activities
 
+import com.tom.rv2ide.utils.Environment
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
@@ -105,6 +106,18 @@ class MainActivity : EdgeToEdgeIDEActivity() {
 
     // Sambungkan ulang ADB Wireless otomatis bila sudah pernah pairing.
     com.tom.rv2ide.adbwireless.AdbAutoConnect.start(applicationContext)
+    // Properti performa Gradle (hanya menambah yang belum ada; tidak menimpa milikmu).
+    try {
+      val gp = java.io.File(Environment.GRADLE_USER_HOME, "gradle.properties")
+      gp.parentFile?.mkdirs()
+      val cur = if (gp.exists()) gp.readText() else ""
+      val add =
+          listOf("org.gradle.parallel=true", "org.gradle.caching=true", "org.gradle.configureondemand=true")
+              .filter { k -> !cur.lines().any { it.trim().startsWith(k.substringBefore('=') + "=") } }
+      if (add.isNotEmpty()) gp.appendText((if (cur.isEmpty() || cur.endsWith("\n")) "" else "\n") + add.joinToString("\n") + "\n")
+    } catch (e: Throwable) {
+      // abaikan
+    }
     // Perintah `adb pair/connect/devices/install/shell` di Terminal aplikasi.
     com.tom.rv2ide.adbwireless.AdbBridge.start(applicationContext)
     
