@@ -276,7 +276,7 @@ class GitHubActivity : AppCompatActivity() {
         val arr = JSONArray(text)
         val names = (0 until arr.length()).map { arr.getJSONObject(it).getString("full_name") }
         runOnUiThread {
-          MaterialAlertDialogBuilder(this)
+          MaterialAlertDialogBuilder(this@GitHubActivity)
               .setTitle("Pilih repo untuk di-clone")
               .setItems(names.toTypedArray()) { _, i -> cloneRepo(names[i]) }
               .setNegativeButton(android.R.string.cancel, null)
