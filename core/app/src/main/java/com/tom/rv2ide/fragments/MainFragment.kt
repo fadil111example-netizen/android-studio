@@ -124,9 +124,9 @@ class MainFragment : BaseFragment() {
                   startActivity(
                       Intent(requireActivity(), com.tom.rv2ide.activities.RestoreActivity::class.java)
                   )
-              MainScreenAction.ACTION_APK_TO_SOURCE ->
+              MainScreenAction.ACTION_GITHUB ->
                   startActivity(
-                      Intent(requireActivity(), com.tom.rv2ide.activities.ApkToSourceActivity::class.java)
+                      Intent(requireActivity(), com.tom.rv2ide.activities.GitHubActivity::class.java)
                   )
               MainScreenAction.ACTION_DOCS -> BaseApplication.getBaseInstance().openDocs()
             }
