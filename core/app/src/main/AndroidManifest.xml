@@ -72,7 +72,7 @@
       android:theme="@style/Theme.AndroidIDE" />
     <activity
       android:exported="false"
-      android:name=".activities.ApkToSourceActivity"
+      android:name=".activities.GitHubActivity"
       android:theme="@style/Theme.AndroidIDE" />
     <activity
       android:exported="false"
