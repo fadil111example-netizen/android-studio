@@ -48,7 +48,7 @@ constructor(
     const val ACTION_DONATE = 5
     const val ACTION_DOCS = 6
     const val ACTION_BACKUP = 7
-    const val ACTION_APK_TO_SOURCE = 8
+    const val ACTION_GITHUB = 8
 
     /** Get all main screen actions. */
     @JvmStatic
@@ -80,8 +80,8 @@ constructor(
         val backup =
             MainScreenAction(ACTION_BACKUP, R.string.btn_backup_restore, R.drawable.ic_folder)
 
-        val apkToSource =
-            MainScreenAction(ACTION_APK_TO_SOURCE, R.string.btn_apk_to_source, R.drawable.ic_file_apk)
+        val github =
+            MainScreenAction(ACTION_GITHUB, R.string.btn_github, R.drawable.ic_github)
 
         Collections.addAll(
             this,
@@ -92,7 +92,7 @@ constructor(
             preferences,
             donate,
             backup,
-            apkToSource,
+            github,
             docs,
         )
       }
