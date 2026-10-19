@@ -33,7 +33,7 @@ import java.util.UUID;
 @SuppressLint("SdCardPath")
 public final class Environment {
 
-    public static final String PROJECTS_FOLDER = "AndroidIDEProjects";
+    public static final String PROJECTS_FOLDER = "StudioProjek";
     private static final Logger LOG = LoggerFactory.getLogger(Environment.class);
     public static File ROOT;
     public static File PREFIX;
@@ -80,7 +80,9 @@ public final class Environment {
         BIN_DIR = mkdirIfNotExits(new File(PREFIX, "bin"));
         LIB_DIR = mkdirIfNotExits(new File(PREFIX, "lib"));
         PROJECTS_DIR = mkdirIfNotExits(new File(FileUtil.getExternalStorageDir(), PROJECTS_FOLDER));
-        AT_ACSHOME_PROJECTS = mkdirIfNotExits(new File(HOME, "ACSProjects"));
+        // Satu folder proyek saja: /sdcard/StudioProjek (folder lama AndroidIDEProjects dihapus bila kosong).
+        new File(FileUtil.getExternalStorageDir(), "AndroidIDEProjects").delete();
+        AT_ACSHOME_PROJECTS = PROJECTS_DIR;
         ANDROID_JAR = mkdirIfNotExits(new File(ANDROIDIDE_HOME, "android.jar"));
         TOOLING_API_JAR = new File(mkdirIfNotExits(new File(ANDROIDIDE_HOME, "tooling-api")),
         "tooling-api-all.jar");

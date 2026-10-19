@@ -3,12 +3,22 @@ package com.tom.rv2ide.activities
 import android.app.ActivityManager
 import android.content.pm.ApplicationInfo
 import android.net.Uri
+import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextUtils
+import android.text.TextWatcher
+import android.view.Gravity
+import android.view.View
 import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.BaseAdapter
 import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.ListView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -264,17 +274,11 @@ class ApkToSourceActivity : AppCompatActivity() {
                   (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 ||
                       (it.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
                 }
-                .map { Triple(pm.getApplicationLabel(it).toString(), it.packageName, it.sourceDir) }
-                .sortedBy { it.first.lowercase() }
+                .map { AppItem(pm.getApplicationLabel(it).toString(), it.packageName, it.sourceDir, pm.getApplicationIcon(it)) }
+                .sortedBy { it.label.lowercase() }
         runOnUiThread {
           setBusy(false)
-          MaterialAlertDialogBuilder(this@ApkToSourceActivity)
-              .setTitle("Pilih aplikasi")
-              .setItems(apps.map { "${it.first}\n${it.second}" }.toTypedArray()) { _, i ->
-                selectInstalled(apps[i])
-              }
-              .setNegativeButton(android.R.string.cancel, null)
-              .show()
+          showAppPicker(apps)
         }
       } catch (t: Throwable) {
         setBusy(false)
@@ -283,19 +287,115 @@ class ApkToSourceActivity : AppCompatActivity() {
     }
   }
 
-  private fun selectInstalled(app: Triple<String, String, String>) {
+  private class AppItem(val label: String, val pkg: String, val src: String, val icon: Drawable)
+
+  private fun showAppPicker(all: List<AppItem>) {
+    var shown = all
+    val adapter =
+        object : BaseAdapter() {
+          override fun getCount() = shown.size
+
+          override fun getItem(position: Int) = shown[position]
+
+          override fun getItemId(position: Int) = position.toLong()
+
+          override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val row =
+                (convertView as? LinearLayout)
+                    ?: LinearLayout(this@ApkToSourceActivity).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(16), dp(8), dp(16), dp(8))
+                      addView(
+                          ImageView(context).apply {
+                            id = 1
+                            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+                          }
+                      )
+                      addView(
+                          LinearLayout(context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(dp(14), 0, 0, 0)
+                            addView(
+                                TextView(context).apply {
+                                  id = 2
+                                  textSize = 16f
+                                  maxLines = 1
+                                  ellipsize = TextUtils.TruncateAt.END
+                                }
+                            )
+                            addView(
+                                TextView(context).apply {
+                                  id = 3
+                                  textSize = 12f
+                                  maxLines = 1
+                                  alpha = 0.7f
+                                  ellipsize = TextUtils.TruncateAt.END
+                                }
+                            )
+                          }
+                      )
+                    }
+            val item = shown[position]
+            row.findViewById<ImageView>(1).setImageDrawable(item.icon)
+            row.findViewById<TextView>(2).text = item.label
+            row.findViewById<TextView>(3).text = item.pkg
+            return row
+          }
+        }
+
+    val list = ListView(this)
+    list.adapter = adapter
+    val search = EditText(this).apply { hint = "Cari aplikasi ..."; maxLines = 1 }
+    val box =
+        LinearLayout(this).apply {
+          orientation = LinearLayout.VERTICAL
+          setPadding(dp(16), dp(8), dp(16), 0)
+          addView(search)
+          addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(420)))
+        }
+    val dialog =
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Pilih aplikasi")
+            .setView(box)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+
+    search.addTextChangedListener(
+        object : TextWatcher {
+          override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+          override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+
+          override fun afterTextChanged(s: Editable?) {
+            val q = s?.toString()?.trim().orEmpty()
+            shown =
+                if (q.isEmpty()) all
+                else all.filter { it.label.contains(q, true) || it.pkg.contains(q, true) }
+            adapter.notifyDataSetChanged()
+          }
+        }
+    )
+    list.setOnItemClickListener { _, _, pos, _ ->
+      dialog.dismiss()
+      selectInstalled(shown[pos])
+    }
+    dialog.show()
+  }
+
+  private fun selectInstalled(app: AppItem) {
     setBusy(true)
     scope.launch {
       try {
-        status("Menyalin APK ${app.first} ...")
-        val dest = File(inputDir(), safeName(app.second) + ".apk")
-        File(app.third).inputStream().use { ins ->
+        status("Menyalin APK ${app.label} ...")
+        val dest = File(inputDir(), safeName(app.pkg) + ".apk")
+        File(app.src).inputStream().use { ins ->
           dest.outputStream().use { out -> ins.copyTo(out, 256 * 1024) }
         }
         apkFile = dest
-        apkLabel = safeName(app.first)
+        apkLabel = safeName(app.label)
         runOnUiThread {
-          selectedView.text = "Dipilih: ${app.first} (${app.second}), ${dest.length() / 1024 / 1024} MB"
+          selectedView.text = "Dipilih: ${app.label} (${app.pkg}), ${dest.length() / 1024 / 1024} MB"
         }
       } catch (t: Throwable) {
         log("ERROR: ${t.javaClass.simpleName}: ${t.message}")
@@ -344,7 +444,7 @@ class ApkToSourceActivity : AppCompatActivity() {
     if (!hasJadx()) ensureJadx()
     if (cancelled) return
 
-    val projects = File(Environment.HOME, "ACSProjects").apply { mkdirs() }
+    val projects = Environment.PROJECTS_DIR.apply { mkdirs() }
     var out = File(projects, "$apkLabel-source")
     var n = 2
     while (out.exists()) out = File(projects, "$apkLabel-source-${n++}")
@@ -356,7 +456,7 @@ class ApkToSourceActivity : AppCompatActivity() {
     val deobf = if (deobfChecked) "--deobf" else ""
     val cmd =
         "'${java.absolutePath}' -Xmx${xmx}m -cp '${jadxLib().absolutePath}/*' jadx.cli.JadxCLI " +
-            "-e -j 2 $deobf -d '${out.absolutePath}' '${apk.absolutePath}' 2>&1"
+            "-e -j 2 --show-bad-code $deobf -d '${out.absolutePath}' '${apk.absolutePath}' 2>&1"
 
     log("Memulai dekompilasi (memori maks ${xmx} MB). Bisa beberapa menit untuk APK besar ...")
     val pb = ProcessBuilder(Environment.BASH_SHELL.absolutePath, "-c", cmd)
@@ -375,8 +475,13 @@ class ApkToSourceActivity : AppCompatActivity() {
         val clean = line.trim()
         if (clean.isNotEmpty()) {
           status(clean.takeLast(120))
-          if (clean.contains("ERROR")) {
+          val m = Regex("count:\\s*(\\d+)").find(clean)
+          if (clean.contains("finished with errors") && m != null) {
+            errors = m.groupValues[1].toInt()
+          } else if (clean.contains("ERROR")) {
             errors++
+          }
+          if (clean.contains("ERROR")) {
             if (shown < 25) {
               shown++
               log(clean.take(200))
@@ -396,10 +501,10 @@ class ApkToSourceActivity : AppCompatActivity() {
     val javaFiles = out.walkTopDown().count { it.isFile && it.extension == "java" }
     when {
       javaFiles > 0 -> {
-        log("SELESAI: $javaFiles file Java diekspor. Bagian yang gagal didekompilasi: ±$errors (ditandai komentar di kode).")
+        log("SELESAI: $javaFiles file Java diekspor. Bagian yang tidak bisa didekompilasi sempurna: $errors (tetap diekspor sebagai kode sebagian + komentar peringatan).")
         log("Lokasi: ${out.absolutePath}")
-        log("Buka lewat menu Buka proyek → ACSProjects → ${out.name}.")
-        log("Catatan: versi Gradle/AGP hasil ekspor mungkin perlu disesuaikan agar bisa di-build.")
+        log("Buka lewat Buka proyek → StudioProjek → ${out.name}, lalu Run seperti biasa.")
+        log("Catatan jujur: kode hasil dekompilasi sering masih punya error kompilasi kecil & versi Gradle/AGP perlu disesuaikan sebelum bisa di-build.")
       }
       else -> log("Gagal (kode keluar $code): tidak ada source yang dihasilkan. Coba aktifkan Deobfuscation atau APK lain.")
     }

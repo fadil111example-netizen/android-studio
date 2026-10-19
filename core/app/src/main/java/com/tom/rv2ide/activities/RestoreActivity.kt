@@ -567,7 +567,7 @@ class RestoreActivity : AppCompatActivity() {
         return Component("Kunci ADB", d, File(home.parentFile, "adb"))
     if (depth <= 2 && n == ".gradle") return Component("Gradle", d, File(home, ".gradle"))
     if (depth <= 2 && n == "plugins") return Component("Plugins", d, File(home, "plugins"))
-    if (depth <= 2 && n == "ACSProjects") return Component("Proyek ACS", d, File(home, "ACSProjects"))
+    if (depth <= 2 && n == "ACSProjects") return Component("Proyek", d, Environment.PROJECTS_DIR)
     if (n.startsWith("android-") && File(d, "android.jar").isFile)
         return Component("Platform SDK", d, File(Environment.ANDROID_HOME, "platforms/$n"))
     if (File(d, "aapt2").isFile && n.firstOrNull()?.isDigit() == true)
