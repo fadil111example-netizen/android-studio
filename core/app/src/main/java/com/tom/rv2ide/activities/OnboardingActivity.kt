@@ -86,6 +86,7 @@ class OnboardingActivity : AppIntro2() {
     IThemeManager.getInstance().applyTheme(this)
 
     super.onCreate(savedInstanceState)
+    window.setBackgroundDrawableResource(com.tom.rv2ide.resources.R.drawable.bg_onboarding)
 
     if (tryNavigateToMainIfSetupIsCompleted()) {
       return

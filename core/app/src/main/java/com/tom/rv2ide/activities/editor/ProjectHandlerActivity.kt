@@ -377,6 +377,9 @@ fun initializeProject(buildVariants: Map<String, String>) {
       return
     }
 
+    // Samakan Gradle wrapper dengan syarat AGP proyek (tanpa batas versi minimum dari aplikasi).
+    com.tom.rv2ide.utils.GradleCompat.fix(projectDir)?.let { log.warn(it) }
+
     val initialized = manager.projectInitialized && manager.cachedInitResult != null
     log.debug("Is project initialized: {}", initialized)
 
