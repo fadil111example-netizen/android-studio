@@ -421,7 +421,14 @@ fun initializeProject(buildVariants: Map<String, String>) {
           log.error("An error occurred initializing the project with Tooling API", error)
         }
 
-        ThreadUtils.runOnUiThread { postProjectInit(false, result?.failure) }
+        ThreadUtils.runOnUiThread {
+          postProjectInit(false, result?.failure)
+          // Wrapper Gradle baru saja diperbaiki otomatis: ulangi sync sekali.
+          if (com.tom.rv2ide.utils.GradleCompat.consumeRetry()) {
+            log.warn("Gradle wrapper diperbaiki otomatis. Mengulang sync ...")
+            initializeProject()
+          }
+        }
         return@whenCompleteAsync
       }
 

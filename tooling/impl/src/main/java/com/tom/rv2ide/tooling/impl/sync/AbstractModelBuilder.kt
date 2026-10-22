@@ -66,7 +66,7 @@ abstract class AbstractModelBuilder<P, R>(
       val agpVersion = AndroidPluginVersion.parse(versions.agp)
 
       // The build should fail if the user is using an older version of AGP
-      if (agpVersion < MINIMUM_SUPPORTED) {
+      if (false && agpVersion < MINIMUM_SUPPORTED) { // fork: tidak ada penolakan versi AGP lama
         throw ModelBuilderException(
             agpVersion.toString() +
                 " is not supported by AndroidIDE. " +

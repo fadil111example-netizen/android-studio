@@ -1,6 +1,13 @@
 package com.tom.rv2ide.activities
 
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import android.widget.ImageView
 import android.text.InputType
 import android.util.Base64
 import android.view.View
@@ -116,8 +123,10 @@ class GitHubActivity : AppCompatActivity() {
     )
     views.forEach { col.addView(it) }
     return MaterialCardView(this).apply {
-      radius = dp(16).toFloat()
-      cardElevation = dp(2).toFloat()
+      radius = dp(20).toFloat()
+      cardElevation = dp(0).toFloat()
+      strokeWidth = dp(1)
+      strokeColor = Color.parseColor("#33007A52")
       layoutParams =
           LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
               .apply { topMargin = dp(12) }
@@ -139,20 +148,7 @@ class GitHubActivity : AppCompatActivity() {
           orientation = LinearLayout.VERTICAL
           setPadding(dp(16), dp(20), dp(16), dp(8))
         }
-    content.addView(
-        TextView(this).apply {
-          text = "GitHub"
-          textSize = 28f
-          setTypeface(typeface, android.graphics.Typeface.BOLD)
-        }
-    )
-    content.addView(
-        TextView(this).apply {
-          text = "Clone, push, jalankan build, dan unduh APK, semua dari sini."
-          textSize = 13f
-          alpha = 0.75f
-        }
-    )
+    content.addView(buildHeader())
 
     etUser = inputField("Username GitHub", InputType.TYPE_CLASS_TEXT, prefs.getString("user", "") ?: "")
     etEmail = inputField("Email (untuk commit)", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, prefs.getString("email", "") ?: "")
@@ -213,15 +209,56 @@ class GitHubActivity : AppCompatActivity() {
     setContentView(page)
   }
 
+  private fun buildHeader(): View {
+    val logo =
+        ImageView(this).apply {
+          setImageResource(com.tom.rv2ide.resources.R.drawable.ic_app_logo)
+          layoutParams = LinearLayout.LayoutParams(dp(56), dp(56))
+        }
+    val texts =
+        LinearLayout(this).apply {
+          orientation = LinearLayout.VERTICAL
+          setPadding(dp(14), 0, 0, 0)
+          addView(
+              TextView(this@GitHubActivity).apply {
+                text = "GitHub"
+                textSize = 26f
+                setTextColor(Color.WHITE)
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+              }
+          )
+          addView(
+              TextView(this@GitHubActivity).apply {
+                text = "Clone · Push · Build · Unduh APK"
+                textSize = 13f
+                setTextColor(Color.parseColor("#CCFFFFFF"))
+              }
+          )
+        }
+    return LinearLayout(this).apply {
+      orientation = LinearLayout.HORIZONTAL
+      gravity = android.view.Gravity.CENTER_VERTICAL
+      setPadding(dp(18), dp(18), dp(18), dp(18))
+      background =
+          GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor("#0B2B3A"), Color.parseColor("#0F7A52"))).apply {
+            cornerRadius = dp(24).toFloat()
+          }
+      addView(logo)
+      addView(texts)
+    }
+  }
+
   /** Panel progres yang selalu terlihat di bagian bawah layar. */
   private fun buildPanel(): View {
-    stageView = TextView(this).apply { text = "Siap."; textSize = 14f; setTypeface(typeface, android.graphics.Typeface.BOLD) }
+    stageView = TextView(this).apply { text = "Siap."; textSize = 15f; setTypeface(typeface, android.graphics.Typeface.BOLD) }
     detailView = TextView(this).apply { textSize = 12f; alpha = 0.75f; maxLines = 1 }
     progressBar =
         ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
           max = 100
           isIndeterminate = false
           progress = 0
+          progressTintList = ColorStateList.valueOf(Color.parseColor("#1FB86B"))
+          indeterminateTintList = ColorStateList.valueOf(Color.parseColor("#1FB86B"))
         }
     stepsView = TextView(this).apply { typeface = android.graphics.Typeface.MONOSPACE; textSize = 12f }
     logView =
@@ -270,7 +307,22 @@ class GitHubActivity : AppCompatActivity() {
 
   private fun detail(msg: String) = runOnUiThread { detailView.text = msg }
 
-  private fun steps(msg: String) = runOnUiThread { stepsView.text = msg }
+  private fun steps(msg: CharSequence) = runOnUiThread { stepsView.text = msg }
+
+  private fun symColor(sym: String): Int =
+      when (sym) {
+        "✓" -> Color.parseColor("#1FB86B")
+        "✗" -> Color.parseColor("#E5484D")
+        "▶" -> Color.parseColor("#2E7DFF")
+        "⊘" -> Color.parseColor("#F5A524")
+        else -> Color.parseColor("#8A938C")
+      }
+
+  private fun colored(text: String, color: Int): CharSequence {
+    val s = SpannableString(text + "\n")
+    s.setSpan(ForegroundColorSpan(color), 0, s.length, 0)
+    return s
+  }
 
   private fun progress(p: Int?) =
       runOnUiThread {
@@ -659,7 +711,7 @@ class GitHubActivity : AppCompatActivity() {
         val run = JSONObject(rt)
         val (jc, jt) = api("GET", "/repos/$s/actions/runs/$runId/jobs")
 
-        val sb = StringBuilder()
+        val sb = SpannableStringBuilder()
         var total = 0
         var done = 0
         var failedJob = 0L
@@ -667,7 +719,8 @@ class GitHubActivity : AppCompatActivity() {
           val jobs = JSONObject(jt).getJSONArray("jobs")
           for (j in 0 until jobs.length()) {
             val job = jobs.getJSONObject(j)
-            sb.appendLine(symbol(job.getString("status"), job.optString("conclusion")) + " " + job.getString("name"))
+            val jsym = symbol(job.getString("status"), job.optString("conclusion"))
+            sb.append(colored("$jsym ${job.getString("name")}", symColor(jsym)))
             if (job.optString("conclusion") == "failure") failedJob = job.getLong("id")
             val st = job.optJSONArray("steps")
             if (st != null) {
@@ -675,12 +728,13 @@ class GitHubActivity : AppCompatActivity() {
                 val step = st.getJSONObject(k)
                 total++
                 if (step.getString("status") == "completed") done++
-                sb.appendLine("   " + symbol(step.getString("status"), step.optString("conclusion")) + " " + step.getString("name").take(48))
+                val ssym = symbol(step.getString("status"), step.optString("conclusion"))
+                sb.append(colored("   $ssym ${step.getString("name").take(48)}", symColor(ssym)))
               }
             }
           }
         }
-        steps(sb.toString().trim())
+        steps(sb)
         progress(if (total > 0) done * 100 / total else null)
 
         val started = run.optString("run_started_at", run.getString("created_at"))

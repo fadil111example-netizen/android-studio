@@ -134,6 +134,12 @@ class EditorBuildEventListener : GradleBuildService.EventListener {
     checkActivity("onOutput") ?: return
 
     line?.let { activity.appendBuildOutput(it) }
+    line?.let {
+      com.tom.rv2ide.utils.GradleCompat.onBuildOutput(
+          runCatching { com.tom.rv2ide.projects.internal.ProjectManagerImpl.getInstance().projectDir }.getOrNull(),
+          it,
+      )
+    }
     // TODO This can be handled better when ProgressEvents are received from Tooling API server
     if (line!!.contains("BUILD SUCCESSFUL") || line.contains("BUILD FAILED")) {
       activity.setStatus(line)
