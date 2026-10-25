@@ -28,4 +28,6 @@
   <string name="greeting_title_fork">Android Studio</string>
   <string name="greeting_subtitle_fork">Bangun, jalankan, dan rilis aplikasi Android — langsung dari HP-mu.</string>
   <string name="btn_github">GitHub</string>
+  <string name="btn_installer">Instal SDK / NDK / CMake</string>
+  <string name="btn_doctor">Dokter Proyek</string>
 </resources>

@@ -124,6 +124,14 @@ class MainFragment : BaseFragment() {
                   startActivity(
                       Intent(requireActivity(), com.tom.rv2ide.activities.RestoreActivity::class.java)
                   )
+              MainScreenAction.ACTION_DOCTOR ->
+                  startActivity(
+                      Intent(requireActivity(), com.tom.rv2ide.activities.DoctorActivity::class.java)
+                  )
+              MainScreenAction.ACTION_INSTALLER ->
+                  startActivity(
+                      Intent(requireActivity(), com.tom.rv2ide.activities.IdeInstallerActivity::class.java)
+                  )
               MainScreenAction.ACTION_GITHUB ->
                   startActivity(
                       Intent(requireActivity(), com.tom.rv2ide.activities.GitHubActivity::class.java)

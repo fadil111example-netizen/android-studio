@@ -74,6 +74,16 @@
       android:exported="false"
       android:name=".activities.GitHubActivity"
       android:theme="@style/Theme.AndroidIDE" />
+
+    <activity
+      android:exported="false"
+      android:name=".activities.IdeInstallerActivity"
+      android:theme="@style/Theme.AndroidIDE" />
+
+    <activity
+      android:exported="false"
+      android:name=".activities.DoctorActivity"
+      android:theme="@style/Theme.AndroidIDE" />
     <activity
       android:exported="false"
       android:name=".activities.MainActivity"

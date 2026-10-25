@@ -49,6 +49,8 @@ constructor(
     const val ACTION_DOCS = 6
     const val ACTION_BACKUP = 7
     const val ACTION_GITHUB = 8
+    const val ACTION_INSTALLER = 9
+    const val ACTION_DOCTOR = 10
 
     /** Get all main screen actions. */
     @JvmStatic
@@ -80,6 +82,12 @@ constructor(
         val backup =
             MainScreenAction(ACTION_BACKUP, R.string.btn_backup_restore, R.drawable.ic_folder)
 
+        val doctor =
+            MainScreenAction(ACTION_DOCTOR, R.string.btn_doctor, R.drawable.ic_docs)
+
+        val installer =
+            MainScreenAction(ACTION_INSTALLER, R.string.btn_installer, R.drawable.ic_folder)
+
         val github =
             MainScreenAction(ACTION_GITHUB, R.string.btn_github, R.drawable.ic_github)
 
@@ -92,6 +100,8 @@ constructor(
             preferences,
             donate,
             backup,
+            doctor,
+            installer,
             github,
             docs,
         )

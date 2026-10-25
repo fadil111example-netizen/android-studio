@@ -377,9 +377,6 @@ fun initializeProject(buildVariants: Map<String, String>) {
       return
     }
 
-    // Samakan Gradle wrapper dengan syarat AGP proyek (tanpa batas versi minimum dari aplikasi).
-    com.tom.rv2ide.utils.GradleCompat.fix(projectDir)?.let { log.warn(it) }
-
     val initialized = manager.projectInitialized && manager.cachedInitResult != null
     log.debug("Is project initialized: {}", initialized)
 
@@ -421,14 +418,7 @@ fun initializeProject(buildVariants: Map<String, String>) {
           log.error("An error occurred initializing the project with Tooling API", error)
         }
 
-        ThreadUtils.runOnUiThread {
-          postProjectInit(false, result?.failure)
-          // Wrapper Gradle baru saja diperbaiki otomatis: ulangi sync sekali.
-          if (com.tom.rv2ide.utils.GradleCompat.consumeRetry()) {
-            log.warn("Gradle wrapper diperbaiki otomatis. Mengulang sync ...")
-            initializeProject()
-          }
-        }
+        ThreadUtils.runOnUiThread { postProjectInit(false, result?.failure) }
         return@whenCompleteAsync
       }
 

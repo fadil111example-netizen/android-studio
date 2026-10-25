@@ -30,7 +30,6 @@ const val KEY_BIN = "IDE_SIGNING_KEY_BIN"
 /**
  * The minimum Android Gradle Plugin version which is supported by AndroidIDE.
  */
-// Fork: tidak ada pemblokiran versi AGP lama (sebelumnya 7.2.0)
 const val AGP_VERSION_MINIMUM = "7.2.0"
 
 val Project.signingKey: Provider<RegularFile>
