@@ -23,7 +23,10 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
+import com.tom.rv2ide.adbwireless.AdbInstallResult
+import com.tom.rv2ide.adbwireless.AdbWireless
 import com.tom.rv2ide.app.IDEApplication
+import com.tom.rv2ide.utils.IntentUtils
 import com.tom.rv2ide.utils.Environment
 import java.io.File
 import java.io.IOException
@@ -53,6 +56,8 @@ class GitHubActivity : AppCompatActivity() {
   private var projectDir: File? = null
   private var slug: String? = null
   @Volatile private var currentRunId = 0L
+  @Volatile private var pipelineMode = false
+  @Volatile private var lastRunSuccess = false
 
   private lateinit var etUser: EditText
   private lateinit var etEmail: EditText
@@ -194,7 +199,8 @@ class GitHubActivity : AppCompatActivity() {
     content.addView(
         card(
             "4. Build (GitHub Actions)",
-            actionButton("Jalankan build", false) { guarded { dispatchBuild() } },
+            actionButton("Kirim → Build → Pasang (1 tombol)", false) { askPipeline() },
+            actionButton("Jalankan build saja", true) { guarded { dispatchBuild() } },
             rowOf(
                 actionButton("Status build", true) { guarded { showRun() } },
                 actionButton("Unduh APK", true) { guarded { downloadApk(null) } },
@@ -702,6 +708,7 @@ class GitHubActivity : AppCompatActivity() {
 
   private suspend fun watchRun(s: String, runId: Long) {
     currentRunId = runId
+    lastRunSuccess = false
     runOnUiThread { btnCancelRun.visibility = View.VISIBLE }
     try {
       var tries = 0
@@ -749,8 +756,9 @@ class GitHubActivity : AppCompatActivity() {
           progress(100)
           when (concl) {
             "success" -> {
+              lastRunSuccess = true
               stage("Build berhasil ✓ ($elapsed)")
-              runOnUiThread { showDownloadDialog(runId) }
+              if (!pipelineMode) runOnUiThread { showDownloadDialog(runId) }
             }
             "cancelled" -> stage("Build dibatalkan ⊘")
             else -> {
@@ -766,6 +774,65 @@ class GitHubActivity : AppCompatActivity() {
       log("Build masih berjalan. Tekan 'Status build' untuk melihat lagi.")
     } finally {
       runOnUiThread { btnCancelRun.visibility = View.GONE }
+    }
+  }
+
+  private fun askPipeline() {
+    if (needProject() == null) return
+    showPipelineDialog()
+  }
+
+  private fun showPipelineDialog() {
+    val input = EditText(this).apply { setText("Update dari Android Studio"); setPadding(dp(20), dp(12), dp(20), dp(12)) }
+    MaterialAlertDialogBuilder(this)
+        .setTitle("Kirim → Build → Pasang")
+        .setMessage("Mengirim perubahan ke GitHub, menjalankan build, mengunduh APK, lalu memasangnya ke HP ini lewat ADB.")
+        .setView(input)
+        .setPositiveButton("Mulai") { _, _ -> guarded { pipeline(input.text.toString().ifBlank { "Update" }) } }
+        .setNegativeButton(android.R.string.cancel, null)
+        .show()
+  }
+
+  /** Alur penuh: commit & push, build di GitHub Actions, unduh APK, pasang lewat ADB, buka aplikasinya. */
+  private suspend fun pipeline(message: String) {
+    pipelineMode = true
+    try {
+      commitAndPush(message)
+      lastRunSuccess = false
+      dispatchBuild()
+      if (!lastRunSuccess) {
+        stage("Berhenti: build tidak sukses")
+        return
+      }
+      val apk = downloadApk(currentRunId)
+      if (apk == null) {
+        log("APK tidak ditemukan di artifact build.")
+        return
+      }
+      val pkg = packageManager.getPackageArchiveInfo(apk.path, 0)?.packageName
+      stage("Memasang APK lewat ADB ...")
+      progress(null)
+      if (!AdbWireless.isSupported) {
+        log("ADB Wireless butuh Android 11+. APK ada di ${apk.absolutePath}")
+        return
+      }
+      val connected = try { AdbWireless.connect(this@GitHubActivity) } catch (e: Throwable) { false }
+      if (!connected) {
+        stage("APK siap (pasang manual)")
+        log("ADB belum tersambung. Lakukan pairing sekali lewat tombol Run → Install via ADB Wireless. APK: ${apk.absolutePath}")
+        return
+      }
+      when (val r = AdbWireless.installApk(this@GitHubActivity, apk, pkg)) {
+        is AdbInstallResult.Success -> {
+          stage("Terpasang ✓")
+          progress(100)
+          log("APK terpasang${pkg?.let { " ($it)" } ?: ""}.")
+          if (pkg != null) runOnUiThread { IntentUtils.launchApp(this@GitHubActivity, pkg, logError = false) }
+        }
+        is AdbInstallResult.Failure -> throw IOException("Pemasangan gagal: ${r.message}")
+      }
+    } finally {
+      pipelineMode = false
     }
   }
 
@@ -823,8 +890,8 @@ class GitHubActivity : AppCompatActivity() {
     watchRun(s, arr.getJSONObject(0).getLong("id"))
   }
 
-  private fun downloadApk(runIdIn: Long?) {
-    val s = slug ?: run { log("Pilih proyek dulu."); return }
+  private fun downloadApk(runIdIn: Long?): File? {
+    val s = slug ?: run { log("Pilih proyek dulu."); return null }
     var runId = runIdIn ?: 0L
     if (runId == 0L) {
       stage("Mencari build sukses terakhir ...")
@@ -868,6 +935,7 @@ class GitHubActivity : AppCompatActivity() {
       }
     }
     var apks = 0
+    var firstApk: File? = null
     ZipInputStream(zip.inputStream().buffered()).use { zin ->
       while (true) {
         val e = zin.nextEntry ?: break
@@ -875,6 +943,7 @@ class GitHubActivity : AppCompatActivity() {
           val f = File(dl, File(e.name).name)
           f.outputStream().use { zin.copyTo(it, 256 * 1024) }
           apks++
+          if (firstApk == null) firstApk = f
           log("APK siap: ${f.absolutePath}")
         }
       }
@@ -887,5 +956,6 @@ class GitHubActivity : AppCompatActivity() {
       log("Buka file APK itu dari pengelola file untuk meng-install.")
     }
     stage("Unduhan selesai ✓")
+    return firstApk
   }
 }
