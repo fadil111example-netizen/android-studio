@@ -52,7 +52,7 @@ import org.tukaani.xz.XZInputStream
  */
 class IdeInstallerActivity : AppCompatActivity() {
 
-  private class Pkg(val label: String, val url: String, val fileName: String, val size: Long)
+  private class Pkg(val label: String, val url: String, val fileName: String, val size: Long, val version: String? = null)
 
   private class Cancelled : RuntimeException("Dibatalkan")
 
@@ -79,10 +79,31 @@ class IdeInstallerActivity : AppCompatActivity() {
   private lateinit var btnCancel: MaterialButton
   private val actionButtons = mutableListOf<MaterialButton>()
 
+  companion object {
+    const val EXTRA_AUTO_KIND = "installer.auto.kind"
+    const val EXTRA_AUTO_VERSION = "installer.auto.version"
+
+    /** Versi NDK yang punya tautan langsung (tanpa enkripsi) sehingga dipasang oleh pemasang ini. */
+    @JvmStatic fun hasDirectNdk(version: String) = version == "29.0.14033849" || version == "27.3.13750724"
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     buildUi()
+
+    // Mode otomatis: dibuka dari IDE Configurations / setup awal untuk memasang versi tertentu.
+    val kind = intent.getStringExtra(EXTRA_AUTO_KIND)
+    val ver = intent.getStringExtra(EXTRA_AUTO_VERSION).orEmpty()
+    if (kind != null) {
+      val pkg = (if (kind == "NDK") ndkFallbacks else cmakeFallbacks).firstOrNull { it.version == ver }
+      if (pkg != null) {
+        if (kind == "NDK") { ndkPick = pkg; refreshNdk() } else { cmakePick = pkg; refreshCmake() }
+        installPick(pkg, kind)
+      } else {
+        log("Versi $ver tidak punya tautan langsung. Pilih manual di bawah.")
+      }
+    }
   }
 
   override fun onDestroy() {
@@ -368,23 +389,32 @@ class IdeInstallerActivity : AppCompatActivity() {
 
   // ------------------------------------------------------------------------------ daftar rilis
 
-  private val ndkFallback =
-      Pkg(
-          "NDK r29 (29.0.14033849)",
-          "https://github.com/AndroidCSOfficial/acs-build-system/releases/download/v29.0.14033849/android-ndk-r29-aarch64-linux-android.tar.xz",
-          "android-ndk-r29-aarch64-linux-android.tar.xz",
-          0L,
+  private val base = "https://github.com/AndroidCSOfficial/acs-build-system/releases/download"
+
+  // Tautan langsung (tanpa enkripsi) arm64 dari manifest acs-build-system.
+  private val ndkFallbacks =
+      listOf(
+          Pkg("NDK r29 (29.0.14033849)", "$base/v29.0.14033849/android-ndk-r29-aarch64-linux-android.tar.xz", "android-ndk-r29-aarch64-linux-android.tar.xz", 0L, "29.0.14033849"),
+          Pkg("NDK r27d (27.3.13750724)", "$base/v27.3.13750724/android-ndk-r27d-aarch64-linux-android.tar.xz", "android-ndk-r27d-aarch64-linux-android.tar.xz", 0L, "27.3.13750724"),
+      )
+
+  private val cmakeFallbacks =
+      listOf(
+          Pkg("CMake 4.1.2", "$base/v4.1.2/cmake-aarch64-linux-musl.tar.xz", "cmake-aarch64-linux-musl.tar.xz", 0L, "4.1.2"),
+          Pkg("CMake 3.31.6", "$base/v3.31.6/cmake-v3.31.6-aarch64.tar.xz", "cmake-v3.31.6-aarch64.tar.xz", 0L, "3.31.6"),
       )
 
   private fun isArchive(n: String) = n.endsWith(".tar.xz") || n.endsWith(".tar.gz") || n.endsWith(".tgz") || n.endsWith(".zip")
 
   private fun ndkList(): List<Pkg> {
     val l = (releases ?: emptyList()).filter { it.fileName.contains("ndk", true) && it.fileName.contains("aarch64", true) && isArchive(it.fileName) }
-    return if (l.none { it.fileName == ndkFallback.fileName }) l + ndkFallback else l
+    return l + ndkFallbacks.filter { f -> l.none { it.fileName == f.fileName } }
   }
 
-  private fun cmakeList(): List<Pkg> =
-      (releases ?: emptyList()).filter { it.fileName.contains("cmake", true) && it.fileName.contains("aarch64", true) && isArchive(it.fileName) }
+  private fun cmakeList(): List<Pkg> {
+    val l = (releases ?: emptyList()).filter { it.fileName.contains("cmake", true) && it.fileName.contains("aarch64", true) && isArchive(it.fileName) }
+    return l + cmakeFallbacks.filter { f -> l.none { it.fileName == f.fileName } }
+  }
 
   /** Mengambil daftar rilis dari repo build-system lalu menjalankan [then] di UI thread. */
   private fun loadReleases(then: () -> Unit) {
@@ -412,7 +442,9 @@ class IdeInstallerActivity : AppCompatActivity() {
           for (j in 0 until assets.length()) {
             val a = assets.getJSONObject(j)
             val n = a.getString("name")
-            out.add(Pkg(n.removeSuffix(".tar.xz").removeSuffix(".tar.gz").removeSuffix(".zip") + " · " + fmt(a.optLong("size")), a.getString("browser_download_url"), n, a.optLong("size")))
+            val dl = a.getString("browser_download_url")
+            val tag = Regex("/download/v([0-9][0-9.]*)/").find(dl)?.groupValues?.get(1)
+            out.add(Pkg(n.removeSuffix(".tar.xz").removeSuffix(".tar.gz").removeSuffix(".zip") + " · " + fmt(a.optLong("size")), dl, n, a.optLong("size"), tag))
           }
         }
         releases = out
@@ -795,7 +827,8 @@ class IdeInstallerActivity : AppCompatActivity() {
   private fun integrateCmake(stageDir: File, pkg: Pkg): File {
     val root = findDir(stageDir, 3) { File(it, "bin/cmake").exists() }
         ?: throw IOException("Isi paket bukan CMake yang valid (bin/cmake tidak ditemukan)")
-    val ver = Regex("cmake-(\\d+\\.\\d+(?:\\.\\d+)?)").find(pkg.fileName)?.groupValues?.get(1)
+    val ver = pkg.version
+        ?: Regex("cmake-(\\d+\\.\\d+(?:\\.\\d+)?)").find(pkg.fileName)?.groupValues?.get(1)
         ?: Regex("cmake-(\\d+\\.\\d+)").find(root.name)?.groupValues?.get(1)
         ?: root.name
     val dest = File(Environment.ANDROID_HOME, "cmake/$ver")

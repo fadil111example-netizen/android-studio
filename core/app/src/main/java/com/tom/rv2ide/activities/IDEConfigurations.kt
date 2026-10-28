@@ -172,6 +172,15 @@ class IDEConfigurations : EdgeToEdgeIDEActivity() {
         }
   }
 
+  override fun onResume() {
+    super.onResume()
+    try {
+      ConfigHandlerRegistry.getHandlerByName("NDK")?.updateStatus()
+    } catch (e: Throwable) {
+      // abaikan
+    }
+  }
+
   private fun setUpDropdown() {
     val dropdown = findViewById<AutoCompleteTextView>(R.id.ndks_dropdown)
     val cmake_dropdown = findViewById<AutoCompleteTextView>(R.id.cmake_dropdown)

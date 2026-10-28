@@ -213,7 +213,11 @@ class DoctorActivity : AppCompatActivity() {
       line(bt.isNotEmpty(), if (bt.isNotEmpty()) "Build-tools: ${bt.sorted().joinToString()}" else "Build-tools belum ada")
 
       // NDK / CMake (opsional)
-      val ndk = File(Environment.ANDROID_HOME, "ndk").listFiles()?.map { it.name } ?: emptyList()
+      val ndk =
+          (File(Environment.ANDROID_HOME, "ndk").listFiles()?.filter { it.isDirectory } ?: emptyList()).map { d ->
+            File(d, "source.properties").takeIf { it.isFile }?.readLines()?.firstOrNull { it.startsWith("Pkg.Revision") }?.substringAfter('=')?.trim()
+                ?: (d.name + " (tidak lengkap)")
+          }
       line(if (ndk.isEmpty()) null else true, if (ndk.isEmpty()) "NDK: belum terpasang (opsional)" else "NDK: ${ndk.sorted().joinToString()}")
       val cm = File(Environment.ANDROID_HOME, "cmake").listFiles()?.map { it.name } ?: emptyList()
       line(if (cm.isEmpty()) null else true, if (cm.isEmpty()) "CMake: belum terpasang (opsional)" else "CMake: ${cm.sorted().joinToString()}")

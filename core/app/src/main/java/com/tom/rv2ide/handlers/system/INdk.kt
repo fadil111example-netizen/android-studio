@@ -99,14 +99,30 @@ class INdk(
       }
     }
 
-    val fullText = context.getString(R.string.cfg_installed_ndk_version, statusText)
+    // Status mengikuti versi yang dipilih di dropdown: terpasang atau belum.
+    val selected =
+        activity?.findViewById<android.widget.AutoCompleteTextView>(R.id.ndks_dropdown)?.text?.toString()?.trim().orEmpty()
+    var shownText = statusText
+    var shownColor = color
+    if (selected.matches(Regex("""\d+\.\d+\.\d+"""))) {
+      val all = if (availableVersions.isEmpty()) "-" else availableVersions.joinToString(" & ")
+      if (selected in availableVersions) {
+        shownText = "$selected terpasang ✓ (semua: $all)"
+        shownColor = if (isDarkTheme) Color.GREEN else Color.rgb(0, 75, 0)
+      } else {
+        shownText = "$selected belum terpasang ✗ (terpasang: $all)"
+        shownColor = Color.rgb(200, 110, 0)
+      }
+    }
+
+    val fullText = context.getString(R.string.cfg_installed_ndk_version, shownText)
     val spannableString = SpannableString(fullText)
 
-    val startIndex = fullText.indexOf(statusText)
+    val startIndex = fullText.indexOf(shownText)
     if (startIndex != -1) {
-      val endIndex = startIndex + statusText.length
+      val endIndex = startIndex + shownText.length
       spannableString.setSpan(
-          ForegroundColorSpan(color),
+          ForegroundColorSpan(shownColor),
           startIndex,
           endIndex,
           SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -163,6 +179,15 @@ class INdk(
       return
     }
 
+    // Versi dengan tautan langsung dipasang lewat pemasang berprogres (tanpa jalur terenkripsi).
+    if (com.tom.rv2ide.activities.IdeInstallerActivity.hasDirectNdk(selectedVersion)) {
+      context.startActivity(
+          android.content.Intent(context, com.tom.rv2ide.activities.IdeInstallerActivity::class.java)
+              .putExtra(com.tom.rv2ide.activities.IdeInstallerActivity.EXTRA_AUTO_KIND, "NDK")
+              .putExtra(com.tom.rv2ide.activities.IdeInstallerActivity.EXTRA_AUTO_VERSION, selectedVersion)
+      )
+      return
+    }
     initializeAcs("android-native-kit", selectedVersion)
   }
 

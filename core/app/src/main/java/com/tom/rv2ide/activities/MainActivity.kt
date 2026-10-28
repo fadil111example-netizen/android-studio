@@ -118,6 +118,21 @@ class MainActivity : EdgeToEdgeIDEActivity() {
     } catch (e: Throwable) {
       // abaikan
     }
+    // NDK pilihan dari setup awal (mis. NDK 29) dipasang otomatis dengan progres.
+    try {
+      val ip = getSharedPreferences("installer_prefs", MODE_PRIVATE)
+      val pending = ip.getString("pending_ndk", null)
+      if (!pending.isNullOrEmpty()) {
+        ip.edit().remove("pending_ndk").apply()
+        startActivity(
+            android.content.Intent(this, IdeInstallerActivity::class.java)
+                .putExtra(IdeInstallerActivity.EXTRA_AUTO_KIND, "NDK")
+                .putExtra(IdeInstallerActivity.EXTRA_AUTO_VERSION, pending)
+        )
+      }
+    } catch (e: Throwable) {
+      // abaikan
+    }
     // Perintah `adb pair/connect/devices/install/shell` di Terminal aplikasi.
     com.tom.rv2ide.adbwireless.AdbBridge.start(applicationContext)
     

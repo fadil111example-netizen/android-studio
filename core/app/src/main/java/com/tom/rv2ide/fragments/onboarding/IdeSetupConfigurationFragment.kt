@@ -159,6 +159,17 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
 
   fun isAutoInstall(): Boolean = content.autoInstallSwitch.isChecked
 
+  /** idesetup (biner tertutup) hanya mengenal NDK 28; NDK 29 diunduh langsung setelah setup selesai. */
+  private fun ndkArgFor(text: CharSequence): String {
+    val sel = NdkVersion.fromDisplayName(text)
+    if (sel == NdkVersion.NDK_29) {
+      requireContext().getSharedPreferences("installer_prefs", android.content.Context.MODE_PRIVATE).edit().putString("pending_ndk", sel.version).apply()
+      return "0"
+    }
+    requireContext().getSharedPreferences("installer_prefs", android.content.Context.MODE_PRIVATE).edit().remove("pending_ndk").apply()
+    return sel.version
+  }
+
   fun buildIdeSetupArguments(): Array<String> {
     val args = mutableListOf<String>()
     args.setArgument(IdeSetupArgument.INSTALL_DIR, Environment.HOME.absolutePath)
@@ -172,7 +183,7 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
     )
     args.setArgument(
         IdeSetupArgument.NDK_VERSION,
-        NdkVersion.fromDisplayName(content.ndkVersion.text).version,
+        ndkArgFor(content.ndkVersion.text),
     )
     args.setArgument(IdeSetupArgument.ASSUME_YES)
     if (content.installGit.isChecked) {

@@ -81,6 +81,7 @@ enum class NdkVersion(val version: String) {
 
   NDK_DISABLE("0"),
   NDK_28("28.2.13676358"),
+  NDK_29("29.0.14033849"),
   ;
 
   val displayName = if (version == "0") "Skip" else "NDK $version"
