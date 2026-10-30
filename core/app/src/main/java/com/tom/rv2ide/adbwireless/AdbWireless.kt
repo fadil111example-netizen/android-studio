@@ -287,6 +287,23 @@ object AdbWireless {
         false
       }
 
+  /** Membuka aliran `adb shell <command>` (mis. logcat). Mengembalikan pembaca baris dan fungsi penutup. */
+  suspend fun openShellReader(context: Context, command: String): Pair<java.io.BufferedReader, () -> Unit> =
+      withContext(Dispatchers.IO) {
+        val m = manager(context)
+        if (!m.isConnected()) connect(context)
+        val stream = m.openStream("shell:$command")
+        val reader = stream.openInputStream().bufferedReader()
+        val closer: () -> Unit = {
+          try {
+            stream.close()
+          } catch (e: Throwable) {
+            // abaikan
+          }
+        }
+        reader to closer
+      }
+
   /** Menjalankan satu perintah `adb shell <command>` dan mengembalikan outputnya. */
   suspend fun shell(context: Context, command: String): String =
       withContext(Dispatchers.IO) {

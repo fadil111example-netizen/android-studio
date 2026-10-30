@@ -84,6 +84,11 @@
       android:exported="false"
       android:name=".activities.DoctorActivity"
       android:theme="@style/Theme.AndroidIDE" />
+
+    <activity
+      android:exported="false"
+      android:name=".activities.LogcatActivity"
+      android:theme="@style/Theme.AndroidIDE" />
     <activity
       android:exported="false"
       android:name=".activities.MainActivity"

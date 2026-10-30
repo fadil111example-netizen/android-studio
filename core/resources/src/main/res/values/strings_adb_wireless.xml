@@ -30,4 +30,5 @@
   <string name="btn_github">GitHub</string>
   <string name="btn_installer">Instal SDK / NDK / CMake</string>
   <string name="btn_doctor">Dokter Proyek</string>
+  <string name="btn_logcat">Logcat (ADB)</string>
 </resources>

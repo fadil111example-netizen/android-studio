@@ -37,6 +37,10 @@
     <item name="colorOutline">#8A938C</item>
     <item name="android:colorBackground">#0F1511</item>
     <item name="colorOnBackground">#DFE4DD</item>
+    <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.AcsSmall</item>
+    <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.AcsMedium</item>
+    <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.AcsLarge</item>
+    <item name="android:windowAnimationStyle">@style/Animation.Acs.Activity</item>
   </style>
 
   <style name="Theme.AndroidIDE" parent="Theme.AndroidIDE.Styled">

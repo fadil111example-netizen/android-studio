@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sudut membulat konsisten di seluruh aplikasi (kartu, tombol, dialog, input) -->
+  <style name="ShapeAppearance.AcsSmall" parent="">
+    <item name="cornerFamily">rounded</item>
+    <item name="cornerSize">14dp</item>
+  </style>
+  <style name="ShapeAppearance.AcsMedium" parent="">
+    <item name="cornerFamily">rounded</item>
+    <item name="cornerSize">20dp</item>
+  </style>
+  <style name="ShapeAppearance.AcsLarge" parent="">
+    <item name="cornerFamily">rounded</item>
+    <item name="cornerSize">28dp</item>
+  </style>
+
+  <!-- Transisi antar layar yang halus (geser + pudar) -->
+  <style name="Animation.Acs.Activity" parent="@android:style/Animation.Activity">
+    <item name="android:activityOpenEnterAnimation">@anim/acs_open_enter</item>
+    <item name="android:activityOpenExitAnimation">@anim/acs_open_exit</item>
+    <item name="android:activityCloseEnterAnimation">@anim/acs_close_enter</item>
+    <item name="android:activityCloseExitAnimation">@anim/acs_close_exit</item>
+  </style>
+</resources>

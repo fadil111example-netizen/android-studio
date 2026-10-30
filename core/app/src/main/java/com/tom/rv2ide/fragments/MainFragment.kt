@@ -124,6 +124,10 @@ class MainFragment : BaseFragment() {
                   startActivity(
                       Intent(requireActivity(), com.tom.rv2ide.activities.RestoreActivity::class.java)
                   )
+              MainScreenAction.ACTION_LOGCAT ->
+                  startActivity(
+                      Intent(requireActivity(), com.tom.rv2ide.activities.LogcatActivity::class.java)
+                  )
               MainScreenAction.ACTION_DOCTOR ->
                   startActivity(
                       Intent(requireActivity(), com.tom.rv2ide.activities.DoctorActivity::class.java)
