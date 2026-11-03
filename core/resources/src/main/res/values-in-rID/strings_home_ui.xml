@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <string name="home_tagline">Bangun, jalankan, dan rilis aplikasi Android dari HP-mu</string>
+  <string name="home_title">Mau bangun apa hari ini?</string>
 </resources>
