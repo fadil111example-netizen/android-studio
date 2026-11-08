@@ -59,7 +59,7 @@ constructor(val actions: List<MainScreenAction> = emptyList()) :
     const val T_ROW = 3
 
     val bigIds = listOf(MainScreenAction.ACTION_CREATE_PROJECT, MainScreenAction.ACTION_OPEN_PROJECT)
-    val toolIds = listOf(2, 3, 8, 9, 10, 11)
+    val toolIds = listOf(12, 2, 3, 8, 9, 10, 11)
     val rowIds = listOf(4, 5, 7, 6)
 
     val subtitles =
@@ -75,7 +75,7 @@ constructor(val actions: List<MainScreenAction> = emptyList()) :
     val accents =
         mapOf(
             2 to 0xFFF59E0B.toInt(), 3 to 0xFFEF4444.toInt(), 8 to 0xFF8B5CF6.toInt(),
-            9 to 0xFF14B8A6.toInt(), 10 to 0xFFEC4899.toInt(), 11 to 0xFF3B82F6.toInt(),
+            9 to 0xFF14B8A6.toInt(), 10 to 0xFFEC4899.toInt(), 11 to 0xFF3B82F6.toInt(), 12 to 0xFFF97316.toInt(),
             4 to 0xFF64748B.toInt(), 5 to 0xFF14B8A6.toInt(), 6 to 0xFF22C55E.toInt(), 7 to 0xFFF97316.toInt(),
         )
 

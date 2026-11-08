@@ -52,6 +52,7 @@ constructor(
     const val ACTION_INSTALLER = 9
     const val ACTION_DOCTOR = 10
     const val ACTION_LOGCAT = 11
+    const val ACTION_WEB = 12
 
     /** Get all main screen actions. */
     @JvmStatic
@@ -80,20 +81,12 @@ constructor(
 
         val docs = MainScreenAction(ACTION_DOCS, R.string.btn_docs, R.drawable.ic_docs)
 
-        val backup =
-            MainScreenAction(ACTION_BACKUP, R.string.btn_backup_restore, R.drawable.ic_folder)
-
-        val logcat =
-            MainScreenAction(ACTION_LOGCAT, R.string.btn_logcat, R.drawable.ic_docs)
-
-        val doctor =
-            MainScreenAction(ACTION_DOCTOR, R.string.btn_doctor, R.drawable.ic_docs)
-
-        val installer =
-            MainScreenAction(ACTION_INSTALLER, R.string.btn_installer, R.drawable.ic_folder)
-
-        val github =
-            MainScreenAction(ACTION_GITHUB, R.string.btn_github, R.drawable.ic_github)
+        val backup = MainScreenAction(ACTION_BACKUP, R.string.btn_backup_restore, R.drawable.ic_folder)
+        val github = MainScreenAction(ACTION_GITHUB, R.string.btn_github, R.drawable.ic_github)
+        val installer = MainScreenAction(ACTION_INSTALLER, R.string.btn_installer, R.drawable.ic_folder)
+        val doctor = MainScreenAction(ACTION_DOCTOR, R.string.btn_doctor, R.drawable.ic_docs)
+        val logcat = MainScreenAction(ACTION_LOGCAT, R.string.btn_logcat, R.drawable.ic_docs)
+        val web = MainScreenAction(ACTION_WEB, R.string.btn_web, R.drawable.ic_web_studio)
 
         Collections.addAll(
             this,
@@ -103,11 +96,12 @@ constructor(
             openTerminal,
             preferences,
             donate,
-            backup,
+            web,
             logcat,
             doctor,
             installer,
             github,
+            backup,
             docs,
         )
       }

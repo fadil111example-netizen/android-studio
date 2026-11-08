@@ -66,6 +66,7 @@
     <activity
       android:exported="false"
       android:name=".activities.OnboardingActivity" />
+
     <activity
       android:exported="false"
       android:name=".activities.RestoreActivity"
@@ -74,20 +75,25 @@
       android:exported="false"
       android:name=".activities.GitHubActivity"
       android:theme="@style/Theme.AndroidIDE" />
-
     <activity
       android:exported="false"
       android:name=".activities.IdeInstallerActivity"
       android:theme="@style/Theme.AndroidIDE" />
-
     <activity
       android:exported="false"
       android:name=".activities.DoctorActivity"
       android:theme="@style/Theme.AndroidIDE" />
-
     <activity
       android:exported="false"
       android:name=".activities.LogcatActivity"
+      android:theme="@style/Theme.AndroidIDE" />
+    <activity
+      android:exported="false"
+      android:name=".activities.WebStudioActivity"
+      android:theme="@style/Theme.AndroidIDE" />
+    <activity
+      android:exported="false"
+      android:name=".activities.WebEditorActivity"
       android:theme="@style/Theme.AndroidIDE" />
     <activity
       android:exported="false"
