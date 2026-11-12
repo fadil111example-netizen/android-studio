@@ -91,19 +91,24 @@ class IDEConfigurations : EdgeToEdgeIDEActivity() {
     checkAcsSystem()
     monitorNetworkConnection()
 
-    // Tombol pemasang lengkap (SDK/JDK/NDK/CMake dengan progres persen) di layar IDE Configurations.
+    // Tombol pemasang lengkap (SDK/JDK/NDK/CMake) dan Platform SDK 35/36/37 di layar IDE Configurations.
     try {
       val ndkCard = findViewById<View>(com.tom.rv2ide.R.id.ndkCardHolder)
       val holder = ndkCard?.parent
       if (holder is android.widget.LinearLayout) {
-        val btn =
+        val idx = holder.indexOfChild(ndkCard)
+        val b2 =
+            MaterialButton(this).apply {
+              text = "Platform SDK 35 / 36 / 37 (dari Google)"
+              setOnClickListener { startActivity(android.content.Intent(this@IDEConfigurations, PlatformInstallerActivity::class.java)) }
+            }
+        val b1 =
             MaterialButton(this).apply {
               text = "Instal SDK / JDK / NDK / CMake (progres lengkap)"
-              setOnClickListener {
-                startActivity(android.content.Intent(this@IDEConfigurations, IdeInstallerActivity::class.java))
-              }
+              setOnClickListener { startActivity(android.content.Intent(this@IDEConfigurations, IdeInstallerActivity::class.java)) }
             }
-        holder.addView(btn, holder.indexOfChild(ndkCard))
+        holder.addView(b2, idx)
+        holder.addView(b1, idx)
       }
     } catch (e: Throwable) {
       // tata letak tidak cocok: tombol tetap tersedia di menu utama

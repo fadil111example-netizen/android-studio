@@ -24,6 +24,8 @@ import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.tom.rv2ide.utils.Environment
+import com.tom.rv2ide.web.ProjectDetector
 import com.tom.rv2ide.web.WebProject
 import com.tom.rv2ide.web.WebRuntime
 import com.tom.rv2ide.web.WebTemplates
@@ -48,6 +50,10 @@ class WebStudioActivity : AppCompatActivity() {
   private lateinit var etPort: EditText
   private lateinit var etCmd: EditText
   private lateinit var btnRun: MaterialButton
+  private lateinit var detectView: TextView
+  private lateinit var tunnelView: TextView
+  private lateinit var etToken: EditText
+  private var detection: ProjectDetector.Result? = null
 
   private val ticker =
       object : Runnable {
@@ -150,6 +156,16 @@ class WebStudioActivity : AppCompatActivity() {
         )
     )
 
+    detectView = TextView(this).apply { text = "Pilih proyek untuk mendeteksi backend dan cara menjalankannya."; textSize = 13f; setTextIsSelectable(true); setPadding(0, dp(8), 0, 0) }
+    content.addView(
+        card(
+            "2. Hasil deteksi",
+            detectView,
+            row(button("Pilih perintah", true) { pickDetected() }, button("Instal dependensi", true) { installDeps() }),
+            button("Deteksi ulang", true) { project?.let { selectDir(it.dir) } },
+        )
+    )
+
     swPublic = SwitchCompat(this).apply {
       text = "Publik (bisa dibuka perangkat lain di Wi-Fi yang sama)"
       textSize = 13f
@@ -162,7 +178,7 @@ class WebStudioActivity : AppCompatActivity() {
     urlView = TextView(this).apply { textSize = 13f; setTextIsSelectable(true); setPadding(0, dp(8), 0, 0) }
     content.addView(
         card(
-            "2. Jalankan",
+            "3. Jalankan",
             swPublic,
             etPort,
             etCmd,
@@ -172,9 +188,28 @@ class WebStudioActivity : AppCompatActivity() {
         )
     )
 
+    val prefs = getSharedPreferences("web_prefs", MODE_PRIVATE)
+    etToken = EditText(this).apply {
+      hint = "Token ngrok (untuk metode ngrok)"
+      inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+      maxLines = 1
+      setText(prefs.getString("ngrok_token", ""))
+    }
+    tunnelView = TextView(this).apply { textSize = 13f; setTextIsSelectable(true); setPadding(0, dp(8), 0, 0) }
     content.addView(
         card(
-            "3. Kode & runtime",
+            "4. Akses publik dari internet",
+            TextView(this).apply { text = "Jalankan server dulu, lalu aktifkan tunnel. Siapa pun di internet bisa membuka tautan yang dibuat. Metode: ngrok (butuh token), SSH atau Cloudflare (tanpa akun)."; textSize = 12f; alpha = 0.8f },
+            etToken,
+            row(button("Aktifkan", false) { chooseTunnel() }, button("Matikan", true) { stopTunnel() }),
+            tunnelView,
+            button("Salin tautan publik", true) { copyTunnel() },
+        )
+    )
+
+    content.addView(
+        card(
+            "5. Kode & runtime",
             button("Edit kode", false) { editCode() },
             row(button("Instal Node.js", true) { installRuntime("nodejs") }, button("Instal Python", true) { installRuntime("python") }),
             button("Instal PHP", true) { installRuntime("php") },
@@ -208,8 +243,7 @@ class WebStudioActivity : AppCompatActivity() {
           if (name.isEmpty()) return@setPositiveButton
           try {
             val dir = WebTemplates.create(name, type)
-            project = WebProject.load(dir)
-            applyProjectToFields()
+            selectDir(dir)
             WebRuntime.log("Proyek '$name' dibuat di ${dir.absolutePath}")
           } catch (e: Throwable) {
             WebRuntime.log("ERROR: ${e.message}")
@@ -219,20 +253,108 @@ class WebStudioActivity : AppCompatActivity() {
         .show()
   }
 
+  private fun candidates(): List<File> {
+    val dirs = ArrayList<File>()
+    Environment.PROJECTS_DIR.listFiles()?.let { dirs.addAll(it) }
+    WebProject.root().listFiles()?.let { dirs.addAll(it) }
+    return dirs.filter { it.isDirectory && it.name != "Web" && ProjectDetector.looksLikeWeb(it) }.distinct().sortedBy { it.name }
+  }
+
   private fun chooseProject() {
-    val dirs = WebProject.root().listFiles()?.filter { File(it, ".acsweb.json").isFile }?.sortedBy { it.name } ?: emptyList()
+    val dirs = candidates()
     if (dirs.isEmpty()) {
-      WebRuntime.log("Belum ada proyek web. Tekan 'Proyek baru'.")
+      WebRuntime.log("Tidak ada proyek web di ${Environment.PROJECTS_DIR.absolutePath}. Taruh/clone proyek di sana, atau tekan 'Proyek baru'.")
       return
     }
     MaterialAlertDialogBuilder(this)
-        .setTitle("Pilih proyek")
-        .setItems(dirs.map { it.name }.toTypedArray()) { _, i ->
-          project = WebProject.load(dirs[i])
-          applyProjectToFields()
-        }
+        .setTitle("Pilih proyek web")
+        .setItems(dirs.map { it.name }.toTypedArray()) { _, i -> selectDir(dirs[i]) }
         .setNegativeButton(android.R.string.cancel, null)
         .show()
+  }
+
+  /** Memilih folder, mendeteksi jenis/backend/perintahnya, lalu mengisi pengaturan otomatis. */
+  private fun selectDir(dir: File) {
+    thread {
+      val det = try { ProjectDetector.detect(dir) } catch (e: Throwable) { null }
+      var p = WebProject.load(dir)
+      if (p == null && det != null) {
+        p = WebProject(dir, det.type, det.port, if (det.type == "static") "" else det.commands.firstOrNull()?.command.orEmpty(), det.webRoot)
+        try { p.save() } catch (e: Throwable) { /* abaikan */ }
+      } else if (p != null && det != null && p.command.isBlank() && det.type != "static") {
+        p.command = det.commands.firstOrNull()?.command.orEmpty()
+        if (det.webRoot.isNotEmpty()) p.root = det.webRoot
+      }
+      project = p
+      detection = det
+      ui.post {
+        applyProjectToFields()
+        detectView.text = det?.summary() ?: "Deteksi gagal."
+      }
+    }
+  }
+
+  private fun pickDetected() {
+    val det = detection
+    if (det == null || det.commands.isEmpty()) {
+      WebRuntime.log("Tidak ada perintah terdeteksi. Isi perintah backend manual, atau biarkan kosong untuk server statis.")
+      return
+    }
+    val items = (listOf("(server statis, tanpa perintah)") + det.commands.map { "${it.command}\n   ${it.label}" }).toTypedArray()
+    MaterialAlertDialogBuilder(this)
+        .setTitle("Perintah menjalankan")
+        .setItems(items) { _, i -> etCmd.setText(if (i == 0) "" else det.commands[i - 1].command); saveFields() }
+        .show()
+  }
+
+  private fun installDeps() {
+    val p = project
+    val cmd = detection?.install
+    if (p == null || cmd == null) {
+      WebRuntime.log("Tidak ada langkah instal dependensi yang terdeteksi.")
+      return
+    }
+    WebRuntime.runOnce(p.dir, cmd) { }
+  }
+
+  // ------------------------------------------------------------------------------- tunnel
+
+  private fun chooseTunnel() {
+    if (!WebRuntime.isRunning()) {
+      WebRuntime.log("Jalankan server dulu, baru aktifkan tunnel.")
+      return
+    }
+    val items = arrayOf("ngrok (butuh token)", "SSH · localhost.run (tanpa akun)", "Cloudflare (tanpa akun)")
+    val kinds = arrayOf("ngrok", "ssh", "cloudflare")
+    MaterialAlertDialogBuilder(this)
+        .setTitle("Metode akses internet")
+        .setItems(items) { _, i ->
+          val token = etToken.text.toString().trim()
+          getSharedPreferences("web_prefs", MODE_PRIVATE).edit().putString("ngrok_token", token).apply()
+          val port = WebRuntime.port
+          thread {
+            try {
+              WebRuntime.startTunnel(kinds[i], port, token)
+            } catch (e: Throwable) {
+              WebRuntime.log("ERROR: ${e.message}")
+            }
+          }
+        }
+        .show()
+  }
+
+  private fun stopTunnel() {
+    thread { WebRuntime.stopTunnel() }
+  }
+
+  private fun copyTunnel() {
+    val u = WebRuntime.tunnelUrl
+    if (u == null) {
+      WebRuntime.log("Belum ada tautan publik.")
+      return
+    }
+    (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("url", u))
+    WebRuntime.log("Tautan publik disalin: $u")
   }
 
   private fun applyProjectToFields() {
@@ -251,7 +373,8 @@ class WebStudioActivity : AppCompatActivity() {
 
   // ------------------------------------------------------------------------------------ server
 
-  private fun staticRoot(p: WebProject): File = if (p.type == "static") p.dir else (File(p.dir, "public").takeIf { it.isDirectory } ?: p.dir)
+  private fun staticRoot(p: WebProject): File =
+      if (p.type == "static") (if (p.root.isNotEmpty()) File(p.dir, p.root) else p.dir) else (File(p.dir, "public").takeIf { it.isDirectory } ?: p.dir)
 
   private fun startServer() {
     val p = project
@@ -305,6 +428,12 @@ class WebStudioActivity : AppCompatActivity() {
     if (logView.text.toString() != t) {
       logView.text = t
       logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
+    }
+    val tu = WebRuntime.tunnelUrl
+    tunnelView.text = when {
+      tu != null -> "🌐 Publik: $tu"
+      WebRuntime.tunnelRunning() -> "Tunnel dibuat, menunggu tautan ..."
+      else -> "Tunnel mati."
     }
     val running = WebRuntime.isRunning()
     if (btnRun.text.startsWith("■") != running) refreshState()

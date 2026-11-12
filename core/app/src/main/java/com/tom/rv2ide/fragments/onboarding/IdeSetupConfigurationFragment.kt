@@ -162,11 +162,25 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
   /** idesetup (biner tertutup) hanya mengenal NDK 28; NDK 29 diunduh langsung setelah setup selesai. */
   private fun ndkArgFor(text: CharSequence): String {
     val sel = NdkVersion.fromDisplayName(text)
+    val prefs = requireContext().getSharedPreferences("installer_prefs", android.content.Context.MODE_PRIVATE)
     if (sel == NdkVersion.NDK_29) {
-      requireContext().getSharedPreferences("installer_prefs", android.content.Context.MODE_PRIVATE).edit().putString("pending_ndk", sel.version).apply()
+      prefs.edit().putString("pending_ndk", sel.version).apply()
       return "0"
     }
-    requireContext().getSharedPreferences("installer_prefs", android.content.Context.MODE_PRIVATE).edit().remove("pending_ndk").apply()
+    prefs.edit().remove("pending_ndk").apply()
+    return sel.version
+  }
+
+  /** SDK 36/37: idesetup memasang SDK dasar 35.0.1, lalu platform 36/37 diunduh dari repositori Google. */
+  private fun sdkArgFor(text: CharSequence): String {
+    val sel = SdkVersion.fromDisplayName(text)
+    val prefs = requireContext().getSharedPreferences("installer_prefs", android.content.Context.MODE_PRIVATE)
+    val major = sel.version.substringBefore('.').toIntOrNull() ?: 0
+    if (major >= 36) {
+      prefs.edit().putString("pending_platforms", "platforms;android-$major").apply()
+      return SdkVersion.SDK_35_0_1.version
+    }
+    prefs.edit().remove("pending_platforms").apply()
     return sel.version
   }
 
@@ -175,7 +189,7 @@ class IdeSetupConfigurationFragment : OnboardingFragment(), SlidePolicy {
     args.setArgument(IdeSetupArgument.INSTALL_DIR, Environment.HOME.absolutePath)
     args.setArgument(
         IdeSetupArgument.SDK_VERSION,
-        SdkVersion.fromDisplayName(content.sdkVersion.text).version,
+        sdkArgFor(content.sdkVersion.text),
     )
     args.setArgument(
         IdeSetupArgument.JDK_VERSION,

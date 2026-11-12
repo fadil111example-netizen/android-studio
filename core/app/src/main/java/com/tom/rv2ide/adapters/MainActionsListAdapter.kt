@@ -60,7 +60,7 @@ constructor(val actions: List<MainScreenAction> = emptyList()) :
 
     val bigIds = listOf(MainScreenAction.ACTION_CREATE_PROJECT, MainScreenAction.ACTION_OPEN_PROJECT)
     val toolIds = listOf(12, 2, 3, 8, 9, 10, 11)
-    val rowIds = listOf(4, 5, 7, 6)
+    val rowIds = listOf(13, 4, 5, 7, 6)
 
     val subtitles =
         mapOf(
@@ -70,13 +70,14 @@ constructor(val actions: List<MainScreenAction> = emptyList()) :
             5 to "NDK, CMake, dan sistem",
             6 to "Panduan penggunaan",
             7 to "Cadangkan & pulihkan data",
+            13 to "Android 35, 36, 37 dari Google",
         )
 
     val accents =
         mapOf(
             2 to 0xFFF59E0B.toInt(), 3 to 0xFFEF4444.toInt(), 8 to 0xFF8B5CF6.toInt(),
             9 to 0xFF14B8A6.toInt(), 10 to 0xFFEC4899.toInt(), 11 to 0xFF3B82F6.toInt(), 12 to 0xFFF97316.toInt(),
-            4 to 0xFF64748B.toInt(), 5 to 0xFF14B8A6.toInt(), 6 to 0xFF22C55E.toInt(), 7 to 0xFFF97316.toInt(),
+            13 to 0xFF22C55E.toInt(), 4 to 0xFF64748B.toInt(), 5 to 0xFF14B8A6.toInt(), 6 to 0xFF22C55E.toInt(), 7 to 0xFFF97316.toInt(),
         )
 
     val gradients =
@@ -131,6 +132,25 @@ constructor(val actions: List<MainScreenAction> = emptyList()) :
         }
     recyclerView.layoutManager = lm
     updateStatus(recyclerView)
+    launchPending(recyclerView)
+  }
+
+  /** Platform SDK 36/37 yang dipilih di setup awal dipasang otomatis dengan progres. */
+  private fun launchPending(rv: RecyclerView) {
+    try {
+      val ctx = rv.context
+      val prefs = ctx.getSharedPreferences("installer_prefs", android.content.Context.MODE_PRIVATE)
+      val pending = prefs.getString("pending_platforms", null)
+      if (!pending.isNullOrEmpty()) {
+        prefs.edit().remove("pending_platforms").apply()
+        ctx.startActivity(
+            android.content.Intent(ctx, com.tom.rv2ide.activities.PlatformInstallerActivity::class.java)
+                .putExtra(com.tom.rv2ide.activities.PlatformInstallerActivity.EXTRA_AUTO, pending)
+        )
+      }
+    } catch (e: Throwable) {
+      // abaikan
+    }
   }
 
   private fun updateStatus(rv: RecyclerView) {

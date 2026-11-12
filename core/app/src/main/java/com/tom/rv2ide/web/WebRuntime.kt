@@ -5,6 +5,9 @@ import com.tom.rv2ide.app.IDEApplication
 import com.tom.rv2ide.utils.Environment
 import java.io.File
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.zip.GZIPInputStream
 import java.net.InetAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
@@ -13,10 +16,10 @@ import java.net.URLDecoder
 import org.json.JSONObject
 
 /** Proyek web: tipe (static/node/python/php), port, dan perintah backend. Disimpan di .acsweb.json. */
-class WebProject(val dir: File, var type: String, var port: Int, var command: String) {
+class WebProject(val dir: File, var type: String, var port: Int, var command: String, var root: String = "") {
 
   fun save() {
-    File(dir, ".acsweb.json").writeText(JSONObject().put("type", type).put("port", port).put("command", command).toString(2))
+    File(dir, ".acsweb.json").writeText(JSONObject().put("type", type).put("port", port).put("command", command).put("root", root).toString(2))
   }
 
   companion object {
@@ -25,7 +28,7 @@ class WebProject(val dir: File, var type: String, var port: Int, var command: St
       if (!f.isFile) return null
       return try {
         val j = JSONObject(f.readText())
-        WebProject(dir, j.optString("type", "static"), j.optInt("port", 8080), j.optString("command", ""))
+        WebProject(dir, j.optString("type", "static"), j.optInt("port", 8080), j.optString("command", ""), j.optString("root", ""))
       } catch (e: Throwable) {
         null
       }
@@ -251,7 +254,7 @@ object WebRuntime {
     stop()
     val host = if (pub) "0.0.0.0" else "127.0.0.1"
     val cmd = command.replace("{HOST}", host).replace("{PORT}", p.toString())
-    val wrapped = if (Regex("[;&|]").containsMatchIn(cmd)) cmd else "exec $cmd"
+    val wrapped = if (Regex("[;&|]").containsMatchIn(cmd) || Regex("^\\s*[A-Za-z_]+=").containsMatchIn(cmd)) cmd else "exec $cmd"
     val pb = ProcessBuilder(Environment.BASH_SHELL.absolutePath, "-c", wrapped)
     pb.environment().putAll(HashMap(TermuxShellEnvironment().getEnvironment(IDEApplication.instance, false)))
     pb.environment()["HOST"] = host
@@ -270,6 +273,155 @@ object WebRuntime {
             // proses berakhir
           }
           log("■ Proses berakhir (kode ${try { proc.waitFor() } catch (e: Throwable) { -1 }}).")
+        }
+        .apply { isDaemon = true }
+        .start()
+  }
+
+  // ------------------------------------------------------------------------ perintah sekali jalan
+
+  private fun baseEnv(): HashMap<String, String> =
+      HashMap(TermuxShellEnvironment().getEnvironment(IDEApplication.instance, false))
+
+  /** Menjalankan perintah sekali (mis. npm install) dan mencatat outputnya ke log. */
+  fun runOnce(dir: File, command: String, onDone: (Int) -> Unit) {
+    Thread {
+          var code = -1
+          try {
+            val pb = ProcessBuilder(Environment.BASH_SHELL.absolutePath, "-c", command)
+            pb.environment().putAll(baseEnv())
+            pb.directory(dir)
+            pb.redirectErrorStream(true)
+            log("▶ $command")
+            val p = pb.start()
+            p.inputStream.bufferedReader().forEachLine { log(it.take(300)) }
+            code = p.waitFor()
+          } catch (e: Throwable) {
+            log("ERROR: ${e.javaClass.simpleName}: ${e.message}")
+          }
+          log(if (code == 0) "✓ Selesai." else "✗ Selesai dengan kode $code.")
+          onDone(code)
+        }
+        .apply { isDaemon = true }
+        .start()
+  }
+
+  // ---------------------------------------------------------------------- tunnel akses internet
+
+  @Volatile var tunnelProcess: Process? = null
+  @Volatile var tunnelUrl: String? = null
+  @Volatile var tunnelKind: String = ""
+
+  fun tunnelRunning(): Boolean = tunnelProcess?.isAlive == true
+
+  fun stopTunnel() {
+    try { tunnelProcess?.destroy() } catch (e: Throwable) { /* abaikan */ }
+    tunnelProcess = null
+    tunnelUrl = null
+    log("■ Tunnel dimatikan.")
+  }
+
+  private fun ngrokBin(): File = File(Environment.HOME, ".acs-tools/ngrok/ngrok")
+
+  /** Mengunduh agen ngrok resmi (linux-arm64) sekali saja. */
+  private fun ensureNgrok(): File {
+    val bin = ngrokBin()
+    if (bin.isFile && bin.canExecute()) return bin
+    bin.parentFile?.mkdirs()
+    log("Mengunduh ngrok (sekali saja) ...")
+    val url = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-arm64.tgz"
+    val c = URL(url).openConnection() as HttpURLConnection
+    c.instanceFollowRedirects = true
+    c.connectTimeout = 20000
+    c.readTimeout = 30000
+    if (c.responseCode != 200) throw IOException("Gagal mengunduh ngrok (HTTP ${c.responseCode})")
+    GZIPInputStream(c.inputStream.buffered()).use { gz ->
+      val h = ByteArray(512)
+      var read = 0
+      while (read < 512) {
+        val r = gz.read(h, read, 512 - read)
+        if (r < 0) throw IOException("Arsip ngrok rusak")
+        read += r
+      }
+      var end = 124
+      while (end < 136 && h[end] != 0.toByte() && h[end] != ' '.code.toByte()) end++
+      val size = String(h, 124, end - 124).trim().toLongOrNull(8) ?: throw IOException("Arsip ngrok tidak terbaca")
+      bin.outputStream().use { out ->
+        var left = size
+        val buf = ByteArray(64 * 1024)
+        while (left > 0) {
+          val r = gz.read(buf, 0, minOf(left, buf.size.toLong()).toInt())
+          if (r < 0) throw IOException("Arsip ngrok terpotong")
+          out.write(buf, 0, r)
+          left -= r
+        }
+      }
+    }
+    bin.setExecutable(true, false)
+    log("ngrok terpasang.")
+    return bin
+  }
+
+  /** Membuka tunnel agar situs bisa diakses dari internet. kind: ngrok | ssh | cloudflare. */
+  fun startTunnel(kind: String, port: Int, token: String) {
+    stopTunnel()
+    val env = baseEnv()
+    val cmd: List<String>
+    val urlRegex: Regex
+    when (kind) {
+      "ngrok" -> {
+        if (token.isBlank()) throw IOException("Isi token ngrok dulu (dashboard.ngrok.com → Your Authtoken).")
+        val bin = ensureNgrok()
+        log("Mengatur token ngrok ...")
+        val cfg = ProcessBuilder(bin.absolutePath, "config", "add-authtoken", token.trim()).apply {
+          environment().putAll(env)
+          redirectErrorStream(true)
+        }.start()
+        cfg.inputStream.bufferedReader().forEachLine { log(it.take(200)) }
+        cfg.waitFor()
+        cmd = listOf(bin.absolutePath, "http", port.toString(), "--log=stdout", "--log-format=logfmt")
+        urlRegex = Regex("url=(https://\\S+)")
+      }
+      "ssh" -> {
+        val ssh = File(Environment.BIN_DIR, "ssh")
+        if (!ssh.exists()) throw IOException("OpenSSH belum terpasang. Di Terminal: pkg install -y openssh")
+        cmd = listOf(ssh.absolutePath, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ServerAliveInterval=30", "-R", "80:localhost:$port", "nokey@localhost.run")
+        urlRegex = Regex("(https://[A-Za-z0-9.-]+\\.(?:lhr\\.life|localhost\\.run))")
+      }
+      "cloudflare" -> {
+        val cf = File(Environment.BIN_DIR, "cloudflared")
+        if (!cf.exists()) throw IOException("cloudflared belum terpasang. Di Terminal: pkg install -y cloudflared")
+        cmd = listOf(cf.absolutePath, "tunnel", "--url", "http://localhost:$port", "--no-autoupdate")
+        urlRegex = Regex("(https://[a-z0-9-]+\\.trycloudflare\\.com)")
+      }
+      else -> throw IOException("Metode tunnel tidak dikenal")
+    }
+    val pb = ProcessBuilder(cmd)
+    pb.environment().putAll(env)
+    pb.redirectErrorStream(true)
+    val proc = pb.start()
+    tunnelProcess = proc
+    tunnelKind = kind
+    log("▶ Membuka tunnel ($kind) ke port $port ...")
+    Thread {
+          try {
+            proc.inputStream.bufferedReader().forEachLine { line ->
+              log(line.take(220))
+              urlRegex.find(line)?.let {
+                tunnelUrl = it.groupValues[1]
+                log("🌐 PUBLIK (internet): ${it.groupValues[1]}")
+              }
+              if (line.contains("[::1]:53") || line.contains("no such host")) log("⚠ DNS Go gagal di Android. Coba metode SSH atau Cloudflare.")
+              if (line.contains("ERR_NGROK_105") || line.contains("authentication failed")) log("⚠ Token ngrok ditolak. Periksa token di dashboard.ngrok.com.")
+            }
+          } catch (e: Throwable) {
+            // proses berakhir
+          }
+          log("■ Tunnel berakhir.")
+          if (tunnelProcess === proc) {
+            tunnelProcess = null
+            tunnelUrl = null
+          }
         }
         .apply { isDaemon = true }
         .start()

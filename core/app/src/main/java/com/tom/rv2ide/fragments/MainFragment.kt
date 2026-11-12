@@ -140,6 +140,10 @@ class MainFragment : BaseFragment() {
                   startActivity(
                       Intent(requireActivity(), com.tom.rv2ide.activities.LogcatActivity::class.java)
                   )
+              MainScreenAction.ACTION_PLATFORM ->
+                  startActivity(
+                      Intent(requireActivity(), com.tom.rv2ide.activities.PlatformInstallerActivity::class.java)
+                  )
               MainScreenAction.ACTION_WEB ->
                   startActivity(
                       Intent(requireActivity(), com.tom.rv2ide.activities.WebStudioActivity::class.java)

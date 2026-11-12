@@ -53,6 +53,7 @@ constructor(
     const val ACTION_DOCTOR = 10
     const val ACTION_LOGCAT = 11
     const val ACTION_WEB = 12
+    const val ACTION_PLATFORM = 13
 
     /** Get all main screen actions. */
     @JvmStatic
@@ -87,6 +88,7 @@ constructor(
         val doctor = MainScreenAction(ACTION_DOCTOR, R.string.btn_doctor, R.drawable.ic_docs)
         val logcat = MainScreenAction(ACTION_LOGCAT, R.string.btn_logcat, R.drawable.ic_docs)
         val web = MainScreenAction(ACTION_WEB, R.string.btn_web, R.drawable.ic_web_studio)
+        val platform = MainScreenAction(ACTION_PLATFORM, R.string.btn_platform, R.drawable.ic_folder)
 
         Collections.addAll(
             this,
@@ -102,6 +104,7 @@ constructor(
             installer,
             github,
             backup,
+            platform,
             docs,
         )
       }

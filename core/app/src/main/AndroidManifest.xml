@@ -95,6 +95,11 @@
       android:exported="false"
       android:name=".activities.WebEditorActivity"
       android:theme="@style/Theme.AndroidIDE" />
+
+    <activity
+      android:exported="false"
+      android:name=".activities.PlatformInstallerActivity"
+      android:theme="@style/Theme.AndroidIDE" />
     <activity
       android:exported="false"
       android:name=".activities.MainActivity"
