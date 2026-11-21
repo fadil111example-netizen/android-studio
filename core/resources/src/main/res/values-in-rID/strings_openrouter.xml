@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="ai_agent_openrouter_api_key">OpenRouter API Key</string>
+  <string name="ai_agent_openrouter_model">Model OpenRouter (opsional)</string>
+</resources>

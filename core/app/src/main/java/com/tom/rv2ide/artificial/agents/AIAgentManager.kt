@@ -22,6 +22,7 @@ import com.tom.rv2ide.artificial.agents.google.Gemini
 import com.tom.rv2ide.artificial.agents.openai.OpenAI
 import com.tom.rv2ide.artificial.agents.anthropic.Anthropic
 import com.tom.rv2ide.artificial.agents.grok.Grok
+import com.tom.rv2ide.artificial.agents.openrouter.OpenRouter
 import com.tom.rv2ide.artificial.agents.deepseek.DeepSeek
 import com.tom.rv2ide.artificial.agents.local.LocalLLM
 import com.tom.rv2ide.artificial.file.FileWriteResult
@@ -51,6 +52,7 @@ class AIAgentManager(private val context: Context) {
         OpenAI.registerAgent()
         Anthropic.registerAgent()
         Grok.registerAgent()
+        OpenRouter.registerAgent()
         DeepSeek.registerAgent()
         LocalLLM.registerAgent()
         

@@ -99,6 +99,10 @@ class Agents(ctx: Context) {
   )
   
   private val claude_models = arrayOf(
+      "claude-fable-5-2",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+      "claude-haiku-5-5",
     "claude-sonnet-4-5-20250929",
     "claude-haiku-4-5-20251001",
     "claude-opus-4-5-20251101",
@@ -144,7 +148,25 @@ class Agents(ctx: Context) {
     "local-model"
   )
   
-  val ai_agents = openai_models + claude_models + gemini_models + deepseek_models + grok_models + localllm_models
+  /** Model OpenRouter populer. ID lain bisa diisi lewat pengaturan "Model OpenRouter" (lihat openrouter.ai/models). */
+  val openrouter_models =
+      arrayOf(
+          "openrouter/auto",
+          "anthropic/claude-sonnet-4.5",
+          "anthropic/claude-opus-4.1",
+          "anthropic/claude-3.7-sonnet",
+          "openai/gpt-4o",
+          "openai/gpt-4.1",
+          "openai/gpt-5",
+          "google/gemini-2.5-pro",
+          "google/gemini-2.5-flash",
+          "deepseek/deepseek-chat",
+          "x-ai/grok-4",
+          "meta-llama/llama-3.3-70b-instruct",
+          "qwen/qwen-2.5-coder-32b-instruct",
+      )
+
+  val ai_agents = openai_models + claude_models + gemini_models + deepseek_models + grok_models + openrouter_models + localllm_models
   
   fun getModelsForProvider(providerId: String): Array<String> {
     return when(providerId) {
@@ -153,6 +175,7 @@ class Agents(ctx: Context) {
       "claude" -> claude_models
       "deepseek" -> deepseek_models
       "grok" -> grok_models
+      "openrouter" -> openrouter_models
       "localllm" -> localllm_models
       else -> gemini_models
     }
@@ -160,6 +183,7 @@ class Agents(ctx: Context) {
   
   fun getProviderForModel(modelName: String): String? {
     return when {
+      modelName in openrouter_models || modelName.contains('/') -> "openrouter"
       modelName in openai_models -> "openai"
       modelName in gemini_models -> "gemini"
       modelName in claude_models -> "claude"
@@ -172,6 +196,7 @@ class Agents(ctx: Context) {
   
   fun setAgent(name: String) {
       val provider = when {
+          name in openrouter_models || name.contains('/') -> "openrouter"
           name in openai_models -> "openai"
           name in gemini_models -> "gemini"
           name in claude_models -> "claude"
@@ -194,6 +219,7 @@ class Agents(ctx: Context) {
       "claude" -> "claude-sonnet-4-20250514"
       "deepseek" -> "deepseek-chat"
       "grok" -> "grok-beta"
+      "openrouter" -> "openrouter/auto"
       else -> "gemini-2.5-pro"
     }
   }
@@ -207,6 +233,7 @@ class Agents(ctx: Context) {
   }
   
   fun isValidModelForProvider(modelName: String, providerId: String): Boolean {
+    if (providerId == "openrouter" && modelName.isNotBlank()) return true
     return modelName in getModelsForProvider(providerId)
   }
 }

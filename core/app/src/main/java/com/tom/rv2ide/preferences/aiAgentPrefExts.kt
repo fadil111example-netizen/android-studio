@@ -51,6 +51,8 @@ private class AIAgentConfig(
   @IgnoredOnParcel private var openAIApiKeyPref: OpenAIApiKey? = null
   @IgnoredOnParcel private var anthropicApiKeyPref: AnthropicApiKey? = null
   @IgnoredOnParcel private var grokApiKeyPref: GrokApiKey? = null
+  @IgnoredOnParcel private var openrouterApiKeyPref: OpenRouterApiKey? = null
+  @IgnoredOnParcel private var openrouterModelPref: OpenRouterModel? = null
 
   init {
     val aiAgentEnabled = AIAgentEnabled { isEnabled -> updateApiKeyPreferencesState(isEnabled) }
@@ -60,6 +62,8 @@ private class AIAgentConfig(
     openAIApiKeyPref = OpenAIApiKey()
     anthropicApiKeyPref = AnthropicApiKey()
     grokApiKeyPref = GrokApiKey()
+    openrouterApiKeyPref = OpenRouterApiKey()
+    openrouterModelPref = OpenRouterModel()
 
     addPreference(aiAgentEnabled)
     addPreference(geminiApiKeyPref!!)
@@ -67,6 +71,8 @@ private class AIAgentConfig(
     addPreference(openAIApiKeyPref!!)
     addPreference(anthropicApiKeyPref!!)
     addPreference(grokApiKeyPref!!)
+    addPreference(openrouterApiKeyPref!!)
+    addPreference(openrouterModelPref!!)
   }
 
   private fun updateApiKeyPreferencesState(isEnabled: Boolean) {
@@ -75,6 +81,8 @@ private class AIAgentConfig(
     openAIApiKeyPref?.setEnabled(isEnabled)
     anthropicApiKeyPref?.setEnabled(isEnabled)
     grokApiKeyPref?.setEnabled(isEnabled)
+    openrouterApiKeyPref?.setEnabled(isEnabled)
+    openrouterModelPref?.setEnabled(isEnabled)
   }
 }
 
@@ -153,6 +161,112 @@ private class GrokApiKey(
 
   private fun getSummaryText(): String {
     val apiKey = prefManager.getString("ai_agent_grok_api_key", "")
+    return if (apiKey.isBlank()) "Click to set API key" else "API Key: ${apiKey.take(8)}..."
+  }
+}
+
+private class OpenRouterApiKey(
+    override val key: String = "ai_agent_openrouter_api_key",
+    override val title: Int = R.string.ai_agent_openrouter_api_key,
+) : BasePreference() {
+
+  @IgnoredOnParcel private var preference: Preference? = null
+
+  override fun onCreatePreference(context: Context): Preference {
+    preference =
+        androidx.preference.Preference(context).apply {
+          key = "ai_agent_openrouter_api_key"
+          title = context.getString(R.string.ai_agent_openrouter_api_key)
+          summary = getSummaryText()
+          isEnabled = prefManager.getBoolean("ai_agent_enabled", false)
+        }
+    return preference!!
+  }
+
+  override fun onPreferenceClick(preference: Preference): Boolean {
+    val context = preference.context
+
+    val editText = android.widget.EditText(context)
+    editText.setText(prefManager.getString("ai_agent_openrouter_api_key", ""))
+    editText.hint = "Enter your OpenRouter API key"
+
+    val dialog =
+        com.google.android.material.dialog
+            .MaterialAlertDialogBuilder(context)
+            .setTitle("OpenRouter API Key")
+            .setMessage("Enter your OpenRouter API key")
+            .setView(editText)
+            .setPositiveButton("Save") { _, _ ->
+              val apiKey = editText.text.toString().trim()
+              prefManager.putString("ai_agent_openrouter_api_key", apiKey)
+              preference.summary = getSummaryText()
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+
+    dialog.show()
+    return true
+  }
+
+  fun setEnabled(enabled: Boolean) {
+    preference?.isEnabled = enabled
+  }
+
+  private fun getSummaryText(): String {
+    val apiKey = prefManager.getString("ai_agent_openrouter_api_key", "")
+    return if (apiKey.isBlank()) "Click to set API key" else "API Key: ${apiKey.take(8)}..."
+  }
+}
+
+private class OpenRouterModel(
+    override val key: String = "ai_agent_openrouter_model",
+    override val title: Int = R.string.ai_agent_openrouter_model,
+) : BasePreference() {
+
+  @IgnoredOnParcel private var preference: Preference? = null
+
+  override fun onCreatePreference(context: Context): Preference {
+    preference =
+        androidx.preference.Preference(context).apply {
+          key = "ai_agent_openrouter_model"
+          title = context.getString(R.string.ai_agent_openrouter_model)
+          summary = getSummaryText()
+          isEnabled = prefManager.getBoolean("ai_agent_enabled", false)
+        }
+    return preference!!
+  }
+
+  override fun onPreferenceClick(preference: Preference): Boolean {
+    val context = preference.context
+
+    val editText = android.widget.EditText(context)
+    editText.setText(prefManager.getString("ai_agent_openrouter_model", ""))
+    editText.hint = "Masukkan ID model OpenRouter, mis. anthropic/claude-sonnet-4.5 (kosong = pakai daftar)"
+
+    val dialog =
+        com.google.android.material.dialog
+            .MaterialAlertDialogBuilder(context)
+            .setTitle("Model OpenRouter")
+            .setMessage("Masukkan ID model OpenRouter, mis. anthropic/claude-sonnet-4.5 (kosong = pakai daftar)")
+            .setView(editText)
+            .setPositiveButton("Save") { _, _ ->
+              val apiKey = editText.text.toString().trim()
+              prefManager.putString("ai_agent_openrouter_model", apiKey)
+              preference.summary = getSummaryText()
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+
+    dialog.show()
+    return true
+  }
+
+  fun setEnabled(enabled: Boolean) {
+    preference?.isEnabled = enabled
+  }
+
+  private fun getSummaryText(): String {
+    val apiKey = prefManager.getString("ai_agent_openrouter_model", "")
     return if (apiKey.isBlank()) "Click to set API key" else "API Key: ${apiKey.take(8)}..."
   }
 }
