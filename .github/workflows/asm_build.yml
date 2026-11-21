@@ -79,14 +79,182 @@ jobs:
       # Tidak memakai keystore developer asli. Build Debug maupun Release
       # ditandatangani otomatis dengan debug keystore standar Android.
       # (Tidak ada secret yang dibutuhkan.)
+      #
+      # Output Gradle ditulis ke file agar bisa diekstrak & di-upload saat gagal.
+      # Step ini sengaja mengembalikan exit code Gradle supaya build tetap
+      # ditandai "failed", sementara step upload di bawah memakai "if: always()".
       - name: Assemble APK
-        run: ./gradlew assemble${{ env.BUILD_TYPE }} --stacktrace --no-daemon
+        id: assemble
+        run: |
+          set +e
+          set +o pipefail 2>/dev/null || true
+
+          LOG_DIR="$GITHUB_WORKSPACE/build-logs"
+          FULL_LOG="$LOG_DIR/gradle-build-full.log"
+          mkdir -p "$LOG_DIR"
+
+          {
+            echo "=================================================================="
+            echo " GRADLE FULL BUILD LOG"
+            echo "=================================================================="
+            echo "Repository  : $GITHUB_REPOSITORY"
+            echo "Workflow    : $GITHUB_WORKFLOW"
+            echo "Run number  : $GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)"
+            echo "Run ID      : $GITHUB_RUN_ID"
+            echo "Commit      : $GITHUB_SHA"
+            echo "Ref         : $GITHUB_REF_NAME"
+            echo "Actor       : $GITHUB_ACTOR"
+            echo "Runner OS   : $RUNNER_OS"
+            echo "Build type  : $BUILD_TYPE"
+            echo "Started at  : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "Command     : ./gradlew assemble$BUILD_TYPE --stacktrace --console=plain --no-daemon"
+            echo "=================================================================="
+            echo
+          } > "$FULL_LOG"
+
+          ./gradlew assemble$BUILD_TYPE --stacktrace --console=plain --no-daemon >> "$FULL_LOG" 2>&1
+          GRADLE_EXIT=$?
+
+          # Tampilkan seluruh log ke halaman Actions (tanpa warna ANSI).
+          cat "$FULL_LOG"
+
+          echo "GRADLE_EXIT=$GRADLE_EXIT" >> "$GITHUB_ENV"
+
+          if [ "$GRADLE_EXIT" -ne 0 ]; then
+            echo "::error title=Gradle build failed::assemble$BUILD_TYPE gagal (exit code $GRADLE_EXIT). Lihat artifact 'build-error-log' / file build-errors.log di bawah."
+            exit "$GRADLE_EXIT"
+          fi
+
+      # -------- Ekstraksi log error khusus (hanya saat build gagal) --------
+      - name: Extract build errors
+        if: failure()
+        run: |
+          set +e
+          set +o pipefail 2>/dev/null || true
+
+          LOG_DIR="$GITHUB_WORKSPACE/build-logs"
+          FULL_LOG="$LOG_DIR/gradle-build-full.log"
+          ERR_LOG="$LOG_DIR/build-errors.log"
+          mkdir -p "$LOG_DIR"
+
+          {
+            echo "##################################################################"
+            echo "#  BUILD ERROR LOG  (auto-generated, plain text)"
+            echo "##################################################################"
+            echo "Repository   : $GITHUB_REPOSITORY"
+            echo "Workflow     : $GITHUB_WORKFLOW"
+            echo "Run number   : $GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)"
+            echo "Run ID       : $GITHUB_RUN_ID"
+            echo "Commit       : $GITHUB_SHA"
+            echo "Ref / Branch : $GITHUB_REF_NAME"
+            echo "Actor        : $GITHUB_ACTOR"
+            echo "Build type   : $BUILD_TYPE"
+            echo "Gradle exit  : ${GRADLE_EXIT:-unknown}"
+            echo "Job status   : FAILED"
+            echo "Generated at : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "##################################################################"
+            echo
+          } > "$ERR_LOG"
+
+          if [ -f "$FULL_LOG" ]; then
+            echo "=================================================================="
+            echo " [1] BAGIAN 'What went wrong' (Gradle failure details)"
+            echo "=================================================================="
+            grep -n -A 40 "What went wrong" "$FULL_LOG" >> "$ERR_LOG" 2>/dev/null
+            echo
+            echo "=================================================================="
+            echo " [2] BARIS ERROR / FAILED / EXCEPTION"
+            echo "=================================================================="
+            grep -n -E "FAILURE:|BUILD FAILED|Execution failed for task|> Task .* FAILED|Caused by:|^e: |error:|error TS|Unresolved reference|AAPT|aapt2|Manifest merger failed|Duplicate class|Cannot|Could not|Exception|not found|no such|Missing|requires|is not|incompatible|Symbol(s)? (not found|is declared)" "$FULL_LOG" >> "$ERR_LOG" 2>/dev/null
+            echo
+            echo "=================================================================="
+            echo " [3] KONTEKS: 30 baris terakhir sebelum kegagalan + 80 baris akhir"
+            echo "=================================================================="
+            FAIL_LINE=$(grep -n -E "FAILURE:|BUILD FAILED|Execution failed for task|> Task .* FAILED" "$FULL_LOG" | head -n 1 | cut -d: -f1)
+            if [ -n "$FAIL_LINE" ]; then
+              START=$(( FAIL_LINE > 30 ? FAIL_LINE - 30 : 1 ))
+              sed -n "${START},${FAIL_LINE}p" "$FULL_LOG" >> "$ERR_LOG" 2>/dev/null
+            fi
+            echo
+            echo "----- (80 baris terakhir dari log lengkap) -----"
+            tail -n 80 "$FULL_LOG" >> "$ERR_LOG" 2>/dev/null
+            echo
+          else
+            {
+              echo "!! Log lengkap Gradle TIDAK ditemukan di $FULL_LOG"
+              echo "   Kemungkinan kegagalan terjadi SEBELUM step 'Assemble APK'."
+            } >> "$ERR_LOG"
+          fi
+
+          # Jika ekstraksi ternyata hampir kosong, lampirkan ekor log lengkap.
+          ERR_LINES=$(wc -l < "$ERR_LOG" 2>/dev/null | tr -d ' ')
+          if [ -z "$ERR_LINES" ]; then ERR_LINES=0; fi
+          if [ "$ERR_LINES" -lt 35 ] && [ -f "$FULL_LOG" ]; then
+            echo
+            echo "=================================================================="
+            echo " [4] FALLBACK: 500 baris terakhir log lengkap"
+            echo "=================================================================="
+            tail -n 500 "$FULL_LOG" >> "$ERR_LOG" 2>/dev/null
+          fi
+
+          echo "----- isi build-errors.log -----"
+          cat "$ERR_LOG"
+
+      # -------- Ringkasan di halaman Actions (hanya saat gagal) --------
+      - name: Publish failure summary
+        if: failure()
+        run: |
+          set +e
+          {
+            echo "## ❌ Build failed"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Build type | \`${BUILD_TYPE:-unknown}\` |"
+            echo "| Gradle exit code | \`${GRADLE_EXIT:-unknown}\` |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo "| Ref | \`${GITHUB_REF_NAME}\` |"
+            echo ""
+            echo "Unduh artifact **build-error-log** (berisi file teks \`build-errors.log\`)"
+            echo "atau artifact **build-full-log** untuk log Gradle lengkap."
+            echo ""
+            echo "<details><summary>Cuplikan error (200 baris terakhir)</summary>"
+            echo ""
+            echo '```text'
+            tail -n 200 "build-logs/build-errors.log" 2>/dev/null || echo "(build-errors.log tidak tersedia)"
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          true
+
+      # -------- Upload: LOG ERROR (file text) saat build gagal --------
+      - name: Upload build error log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-error-log-${{ env.BUILD_TYPE_LOWER }}-run${{ github.run_number }}
+          path: build-logs/build-errors.log
+          if-no-files-found: warn
+          retention-days: 30
+
+      # -------- Upload: LOG LENGKAP (selalu, berguna walau sukses/gagal) --------
+      - name: Upload full build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-full-log-${{ env.BUILD_TYPE_LOWER }}-run${{ github.run_number }}
+          path: build-logs/gradle-build-full.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: List APK files
+        if: success()
         run: find core/app/build/outputs/apk -name "*.apk" -exec ls -la {} \; || true
 
       # Hanya satu APK: arm64-v8a (cocok untuk hampir semua HP modern)
       - name: Upload APK (arm64-v8a)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: android-studio-arm64-v8a-${{ env.BUILD_TYPE_LOWER }}
